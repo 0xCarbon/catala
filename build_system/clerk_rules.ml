@@ -495,7 +495,7 @@ let with_ninja_process
         (if Global.options.debug then print_endline line
          else
            match Re.exec_opt ninja_count_re line with
-           | None -> print_endline line
+           | None -> if isatty then print_endline line else prerr_endline line
            | Some gs ->
              if isatty then
                let count = int_of_string (Re.Group.get gs 1) in

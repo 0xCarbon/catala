@@ -44,3 +44,60 @@ $ catala test-scope Overflow --input {"n":"-100000000000000000000000000000"}
 $ catala test-scope Overflow --input {"n":"1000"} -F json
 {"d":{"years":0,"months":0,"days":2000}}
 ```
+
+Sums, differences and negations of durations are checked the same way:
+
+```catala
+declaration scope Arithmetic:
+  input op content integer
+  output d content duration
+
+scope Arithmetic:
+  definition d equals
+    let max equals 4611686018427387903 day in
+    if op = 1 then max + 1 day
+    else if op = 2 then (0 day - max) - 2 day
+    else - ((0 day - max) - 1 day)
+```
+
+```catala-test-cli
+$ catala test-scope Arithmetic --input {"op":1}
+┌─[ERROR]─
+│
+│  During evaluation: an integer is too large for this computation.
+│
+├─➤ tests/date/bad/duration_overflow.catala_en:58.24-25:
+│    │
+│ 58 │     if op = 1 then max + 1 day
+│    │                        ‾
+└─ Durations of more units than machine integers hold
+#return code 123#
+```
+
+```catala-test-cli
+$ catala test-scope Arithmetic --input {"op":2}
+┌─[ERROR]─
+│
+│  During evaluation: an integer is too large for this computation.
+│
+├─➤ tests/date/bad/duration_overflow.catala_en:59.39-40:
+│    │
+│ 59 │     else if op = 2 then (0 day - max) - 2 day
+│    │                                       ‾
+└─ Durations of more units than machine integers hold
+#return code 123#
+```
+
+```catala-test-cli
+$ catala test-scope Arithmetic --input {"op":3}
+┌─[ERROR]─
+│
+│  During evaluation: an integer is too large for this computation.
+│
+├─➤ tests/date/bad/duration_overflow.catala_en:60.10-11:
+│    │
+│ 60 │     else - ((0 day - max) - 1 day)
+│    │          ‾
+└─ Durations of more units than machine integers hold
+#return code 123#
+```

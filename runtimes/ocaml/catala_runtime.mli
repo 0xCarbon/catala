@@ -519,7 +519,10 @@ module Oper : sig
   val o_minus_int : integer -> integer
   val o_minus_rat : decimal -> decimal
   val o_minus_mon : money -> money
-  val o_minus_dur : duration -> duration
+
+  val o_minus_dur : code_location -> duration -> duration
+  (** @raise Runtime.IntegerOverflow *)
+
   val o_and : bool -> bool -> bool
   val o_or : bool -> bool -> bool
   val o_xor : bool -> bool -> bool
@@ -541,13 +544,19 @@ module Oper : sig
   val o_add_rat_rat : decimal -> decimal -> decimal
   val o_add_mon_mon : money -> money -> money
   val o_add_dat_dur : date_rounding -> code_location -> date -> duration -> date
-  val o_add_dur_dur : duration -> duration -> duration
+
+  val o_add_dur_dur : code_location -> duration -> duration -> duration
+  (** @raise Runtime.IntegerOverflow *)
+
   val o_sub_int_int : integer -> integer -> integer
   val o_sub_rat_rat : decimal -> decimal -> decimal
   val o_sub_mon_mon : money -> money -> money
   val o_sub_dat_dat : date -> date -> duration
   val o_sub_dat_dur : date_rounding -> code_location -> date -> duration -> date
-  val o_sub_dur_dur : duration -> duration -> duration
+
+  val o_sub_dur_dur : code_location -> duration -> duration -> duration
+  (** @raise Runtime.IntegerOverflow *)
+
   val o_mult_int_int : integer -> integer -> integer
   val o_mult_rat_rat : decimal -> decimal -> decimal
   val o_mult_mon_int : money -> integer -> money

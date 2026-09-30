@@ -1,0 +1,18 @@
+# Duration sums beyond 64-bit machine integers
+
+Java cannot represent these components (its duration components are `int`).
+
+> Module Overflow64
+
+```catala-metadata
+#[test]
+declaration scope Sum64:
+  output d content duration
+```
+
+```catala
+# An error in OCaml (first sum) and C (second sum)
+scope Sum64:
+  definition d equals
+    let x equals 4611686018427387903 day in x + x + x
+```

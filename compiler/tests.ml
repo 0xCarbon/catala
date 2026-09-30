@@ -530,6 +530,28 @@ let overflows f =
   | _ -> false
   | exception R.Error (R.IntegerOverflow, [_], None) -> true
 
+let test_duration_sum () =
+  let max = days max_int and min = days min_int in
+  Alcotest.(check bool)
+    "sum" true
+    (overflows (fun () -> R.Oper.o_add_dur_dur pos max (days 1)));
+  Alcotest.(check bool)
+    "difference" true
+    (overflows (fun () -> R.Oper.o_sub_dur_dur pos min (days 1)));
+  Alcotest.(check bool)
+    "negation" true
+    (overflows (fun () -> R.Oper.o_minus_dur pos min));
+  Alcotest.(check bool)
+    "date minus the smallest duration" true
+    (overflows (fun () ->
+         R.Oper.o_sub_dat_dur R.AbortOnRound pos
+           (R.date_of_numbers 2000 1 1)
+           min));
+  Alcotest.(check bool)
+    "in range" true
+    (R.duration_to_years_months_days (R.Oper.o_sub_dur_dur pos max max)
+    = (0, 0, 0))
+
 let test_duration_product () =
   let half = Z.of_int (max_int / 2) in
   Alcotest.(check bool)
@@ -556,7 +578,10 @@ let () =
           test_case "errors" `Quick test_from_json_errors;
         ] );
       ( "Duration arithmetic overflow",
-        [test_case "product" `Quick test_duration_product] );
+        [
+          test_case "product" `Quick test_duration_product;
+          test_case "sum, difference, negation" `Quick test_duration_sum;
+        ] );
       ( "Iota-reduction",
         [
           test_case "#1" `Quick Shared_ast.Optimizations.test_iota_reduction_1;

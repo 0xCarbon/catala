@@ -78,18 +78,18 @@ public final class CatalaDate extends CatalaValue<CatalaDate> {
 
     public CatalaDate subDurationAbortOnRound(CatalaPosition pos, CatalaDuration dur) {
         try {
-            return new CatalaDate(this.date.add(dur.period.negate()));
+            return new CatalaDate(this.date.add(dur.negate().period));
         } catch (AmbiguousComputationException e) {
             throw CatalaError.error(CatalaError.Error.DateError, pos, "ambiguous date computation with no rounding mode specified");
         }
     }
 
     public CatalaDate subDurationRoundUp(CatalaPosition pos, CatalaDuration dur) {
-        return new CatalaDate(this.date.add(dur.period.negate(), Rounding.ROUND_UP));
+        return new CatalaDate(this.date.add(dur.negate().period, Rounding.ROUND_UP));
     }
 
     public CatalaDate subDurationRoundDown(CatalaPosition pos, CatalaDuration dur) {
-        return new CatalaDate(this.date.add(dur.period.negate(), Rounding.ROUND_DOWN));
+        return new CatalaDate(this.date.add(dur.negate().period, Rounding.ROUND_DOWN));
     }
 
     public CatalaDuration subtract(CatalaDate date) {

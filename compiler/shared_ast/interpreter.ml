@@ -221,7 +221,8 @@ let rec evaluate_operator
   | Minus_int, [(ELit (LInt x), _)] -> ELit (LInt (o_minus_int x))
   | Minus_rat, [(ELit (LRat x), _)] -> ELit (LRat (o_minus_rat x))
   | Minus_mon, [(ELit (LMoney x), _)] -> ELit (LMoney (o_minus_mon x))
-  | Minus_dur, [(ELit (LDuration x), _)] -> ELit (LDuration (o_minus_dur x))
+  | Minus_dur, [(ELit (LDuration x), _)] ->
+    ELit (LDuration (o_minus_dur (rpos ()) x))
   | ToInt_rat, [(ELit (LRat x), _)] -> ELit (LInt (o_toint_rat x))
   | ToInt_mon, [(ELit (LMoney x), _)] -> ELit (LInt (o_toint_mon x))
   | ToRat_int, [(ELit (LInt i), _)] -> ELit (LRat (o_torat_int i))
@@ -239,7 +240,7 @@ let rec evaluate_operator
   | Add_dat_dur r, [(ELit (LDate x), _); (ELit (LDuration y), _)] ->
     ELit (LDate (o_add_dat_dur r (rpos ()) x y))
   | Add_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-    ELit (LDuration (o_add_dur_dur x y))
+    ELit (LDuration (o_add_dur_dur (rpos ()) x y))
   | Sub_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
     ELit (LInt (o_sub_int_int x y))
   | Sub_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
@@ -251,7 +252,7 @@ let rec evaluate_operator
   | Sub_dat_dur r, [(ELit (LDate x), _); (ELit (LDuration y), _)] ->
     ELit (LDate (o_sub_dat_dur r (rpos ()) x y))
   | Sub_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-    ELit (LDuration (o_sub_dur_dur x y))
+    ELit (LDuration (o_sub_dur_dur (rpos ()) x y))
   | Mult_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
     ELit (LInt (o_mult_int_int x y))
   | Mult_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->

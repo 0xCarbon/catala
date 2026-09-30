@@ -307,7 +307,8 @@ CATALA_DEC o_minus_rat (CATALA_DEC x);
 
 CATALA_MONEY o_minus_mon (CATALA_MONEY x);
 
-CATALA_DURATION o_minus_dur (CATALA_DURATION dur);
+CATALA_DURATION o_minus_dur (const catala_code_position* pos,
+                             CATALA_DURATION dur);
 
 CATALA_INT o_toint_rat (CATALA_DEC x);
 
@@ -342,7 +343,8 @@ CATALA_DATE o_add_dat_dur (dc_date_rounding mode,
                            CATALA_DATE x1,
                            CATALA_DURATION x2);
 
-CATALA_DURATION o_add_dur_dur (CATALA_DURATION x1, CATALA_DURATION x2);
+CATALA_DURATION o_add_dur_dur (const catala_code_position* pos,
+                               CATALA_DURATION x1, CATALA_DURATION x2);
 
 CATALA_INT o_sub_int_int (CATALA_INT x1, CATALA_INT x2);
 
@@ -356,7 +358,8 @@ CATALA_DATE o_sub_dat_dur (dc_date_rounding mode,
                            const catala_code_position* pos,
                            CATALA_DATE x1, CATALA_DURATION x2);
 
-CATALA_DURATION o_sub_dur_dur (CATALA_DURATION x1, CATALA_DURATION x2);
+CATALA_DURATION o_sub_dur_dur (const catala_code_position* pos,
+                               CATALA_DURATION x1, CATALA_DURATION x2);
 
 CATALA_INT o_mult_int_int (CATALA_INT x1, CATALA_INT x2);
 

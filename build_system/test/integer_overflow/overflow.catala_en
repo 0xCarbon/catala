@@ -1,8 +1,8 @@
-# Duration multiplication beyond machine integers
+# Duration arithmetic beyond machine integers
 
 The components of durations are machine integers in the OCaml, C and Java
-runtimes: the product is the IntegerOverflow runtime error there, not a
-wrapped or truncated duration. Python integers are unbounded.
+runtimes: products and sums beyond them are the IntegerOverflow runtime error
+there, not a wrapped or truncated duration. Python integers are unbounded.
 
 > Module Overflow
 
@@ -10,9 +10,17 @@ wrapped or truncated duration. Python integers are unbounded.
 #[test]
 declaration scope Mult:
   output d content duration
+
+#[test]
+declaration scope Sum32:
+  output d content duration
 ```
 
 ```catala
 scope Mult:
   definition d equals 2 day * 9223372036854775807
+
+# Beyond 32-bit components: an error in Java
+scope Sum32:
+  definition d equals 1073741824 day + 1073741824 day
 ```

@@ -53,16 +53,39 @@ public final class CatalaDuration extends CatalaValue<CatalaDuration> {
         return this.period;
     }
 
+    // The components of durations are ints: sums and differences beyond them
+    // are IntegerOverflow, not wrapped values
     public final CatalaDuration add(CatalaDuration other) {
-        return new CatalaDuration(this.period.add(other.period));
+        try {
+            return new CatalaDuration(new Period(
+                    Math.addExact(this.getYears(), other.getYears()),
+                    Math.addExact(this.getMonths(), other.getMonths()),
+                    Math.addExact(this.getDays(), other.getDays())));
+        } catch (ArithmeticException e) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow);
+        }
     }
 
     public final CatalaDuration subtract(CatalaDuration other) {
-        return new CatalaDuration(this.period.add(other.period.negate()));
+        try {
+            return new CatalaDuration(new Period(
+                    Math.subtractExact(this.getYears(), other.getYears()),
+                    Math.subtractExact(this.getMonths(), other.getMonths()),
+                    Math.subtractExact(this.getDays(), other.getDays())));
+        } catch (ArithmeticException e) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow);
+        }
     }
 
     public final CatalaDuration negate() {
-        return new CatalaDuration(this.period.negate());
+        try {
+            return new CatalaDuration(new Period(
+                    Math.negateExact(this.getYears()),
+                    Math.negateExact(this.getMonths()),
+                    Math.negateExact(this.getDays())));
+        } catch (ArithmeticException e) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow);
+        }
     }
 
     // Mult_dur_int

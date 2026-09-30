@@ -1695,7 +1695,25 @@ module Oper = struct
   let o_minus_int i1 = Z.sub Z.zero i1
   let o_minus_rat i1 = Q.sub Q.zero i1
   let o_minus_mon m1 = Z.sub Z.zero m1
-  let o_minus_dur = Dates_calc.neg_period
+
+  (* The components of durations are machine integers *)
+  let checked_period pos f d1 d2 =
+    let y1, m1, d1 = Dates_calc.period_to_ymds d1 in
+    let y2, m2, d2 = Dates_calc.period_to_ymds d2 in
+    let c a b =
+      let r = f (Z.of_int a) (Z.of_int b) in
+      if Z.fits_int r then Z.to_int r else error IntegerOverflow [pos]
+    in
+    let years = c y1 y2 in
+    let months = c m1 m2 in
+    let days = c d1 d2 in
+    Dates_calc.make_period ~years ~months ~days
+
+  let o_minus_dur pos d =
+    checked_period pos Z.sub
+      (Dates_calc.make_period ~years:0 ~months:0 ~days:0)
+      d
+
   let o_and = ( && )
   let o_or = ( || )
   let o_xor : bool -> bool -> bool = ( <> )
@@ -1732,16 +1750,16 @@ module Oper = struct
         (DateError "ambiguous date computation with no rounding mode specified")
         [pos]
 
-  let o_add_dur_dur = Dates_calc.add_periods
+  let o_add_dur_dur pos d1 d2 = checked_period pos Z.add d1 d2
   let o_sub_int_int i1 i2 = Z.sub i1 i2
   let o_sub_rat_rat i1 i2 = Q.sub i1 i2
   let o_sub_mon_mon m1 m2 = Z.sub m1 m2
   let o_sub_dat_dat = Dates_calc.sub_dates
 
   let o_sub_dat_dur r pos dat dur =
-    o_add_dat_dur r pos dat (Dates_calc.neg_period dur)
+    o_add_dat_dur r pos dat (o_minus_dur pos dur)
 
-  let o_sub_dur_dur = Dates_calc.sub_periods
+  let o_sub_dur_dur pos d1 d2 = checked_period pos Z.sub d1 d2
   let o_mult_int_int i1 i2 = Z.mul i1 i2
   let o_mult_rat_rat i1 i2 = Q.mul i1 i2
 

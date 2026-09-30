@@ -43,6 +43,10 @@ in behavior visible for the end-users of the tooling.
   integers: 63-bit natively in OCaml, 32-bit under js_of_ocaml and in Java,
   `long` in C; Python integers are unbounded.
 
+* Fix duration addition, subtraction and negation: they raise
+  `IntegerOverflow` instead of wrapping silently
+  (`4611686018427387903 day + 1 day` was negative).
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

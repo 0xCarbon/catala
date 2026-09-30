@@ -1,13 +1,22 @@
-; Each backend reports a duration product beyond its machine integers
+; Each backend reports duration arithmetic beyond its machine integers.
+; Java cannot represent the components of Sum64 (overflow64.catala_en).
 
 (rule
  (alias runtest)
  (deps
   run.sh
   overflow.catala_en
+  overflow64.catala_en
   (package catala))
  (action
-  (run sh run.sh ocaml 123 "an integer is too large for this computation")))
+  (run
+   sh
+   run.sh
+   overflow.catala_en
+   ocaml
+   Mult
+   123
+   "an integer is too large for this computation")))
 
 (rule
  (alias runtest)
@@ -15,9 +24,17 @@
  (deps
   run.sh
   overflow.catala_en
+  overflow64.catala_en
   (package catala))
  (action
-  (run sh run.sh c 123 "An integer is too large for this computation")))
+  (run
+   sh
+   run.sh
+   overflow.catala_en
+   c
+   Mult
+   123
+   "An integer is too large for this computation")))
 
 (rule
  (alias runtest)
@@ -25,9 +42,17 @@
  (deps
   run.sh
   overflow.catala_en
+  overflow64.catala_en
   (package catala))
  (action
-  (run sh run.sh java 123 "an integer is too large for this computation")))
+  (run
+   sh
+   run.sh
+   overflow.catala_en
+   java
+   Mult
+   123
+   "an integer is too large for this computation")))
 
 (rule
  (alias runtest)
@@ -35,6 +60,117 @@
  (deps
   run.sh
   overflow.catala_en
+  overflow64.catala_en
   (package catala))
  (action
-  (run sh run.sh python 0 "18446744073709551614 days")))
+  (run
+   sh
+   run.sh
+   overflow.catala_en
+   python
+   Mult
+   0
+   "18446744073709551614 days")))
+
+(rule
+ (alias runtest)
+ (deps
+  run.sh
+  overflow.catala_en
+  overflow64.catala_en
+  (package catala))
+ (action
+  (run sh run.sh overflow.catala_en ocaml Sum32 0 "2147483648 days")))
+
+(rule
+ (alias runtest)
+ (enabled_if %{bin-available:cc})
+ (deps
+  run.sh
+  overflow.catala_en
+  overflow64.catala_en
+  (package catala))
+ (action
+  (run sh run.sh overflow.catala_en c Sum32 0 "2147483648 days")))
+
+(rule
+ (alias runtest)
+ (enabled_if %{bin-available:javac})
+ (deps
+  run.sh
+  overflow.catala_en
+  overflow64.catala_en
+  (package catala))
+ (action
+  (run
+   sh
+   run.sh
+   overflow.catala_en
+   java
+   Sum32
+   123
+   "an integer is too large for this computation")))
+
+(rule
+ (alias runtest)
+ (enabled_if %{bin-available:python3})
+ (deps
+  run.sh
+  overflow.catala_en
+  overflow64.catala_en
+  (package catala))
+ (action
+  (run sh run.sh overflow.catala_en python Sum32 0 "2147483648 days")))
+
+(rule
+ (alias runtest)
+ (deps
+  run.sh
+  overflow.catala_en
+  overflow64.catala_en
+  (package catala))
+ (action
+  (run
+   sh
+   run.sh
+   overflow64.catala_en
+   ocaml
+   Sum64
+   123
+   "an integer is too large for this computation")))
+
+(rule
+ (alias runtest)
+ (enabled_if %{bin-available:cc})
+ (deps
+  run.sh
+  overflow.catala_en
+  overflow64.catala_en
+  (package catala))
+ (action
+  (run
+   sh
+   run.sh
+   overflow64.catala_en
+   c
+   Sum64
+   123
+   "An integer is too large for this computation")))
+
+(rule
+ (alias runtest)
+ (enabled_if %{bin-available:python3})
+ (deps
+  run.sh
+  overflow.catala_en
+  overflow64.catala_en
+  (package catala))
+ (action
+  (run
+   sh
+   run.sh
+   overflow64.catala_en
+   python
+   Sum64
+   0
+   "13835058055282163709 days")))

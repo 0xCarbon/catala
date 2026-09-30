@@ -723,38 +723,38 @@ void catala_print (struct catala_buf buf, const catala_value x) {
   case DURATION:
     buf.printf("[");
     if (dc_period_years(x.v)) {
-      buf.printf ("%d ", dc_period_years(x.v));
+      buf.printf ("%ld ", dc_period_years(x.v));
       switch (catala_language) {
       case Catala_lang_En: buf.printf("year"); break;
       case Catala_lang_Fr: buf.printf("an"); break;
       case Catala_lang_Pl: buf.printf("rok"); break;
       };
-      if (abs(dc_period_years(x.v)) > 1 && catala_language != Catala_lang_Pl)
+      if (labs(dc_period_years(x.v)) > 1 && catala_language != Catala_lang_Pl)
         buf.printf("s");
       if (dc_period_months(x.v) ||  dc_period_days(x.v))
         buf.printf(", ");
     }
     if (dc_period_months(x.v)) {
-      buf.printf ("%d ", dc_period_months(x.v));
+      buf.printf ("%ld ", dc_period_months(x.v));
       switch (catala_language) {
       case Catala_lang_En: buf.printf("month"); break;
       case Catala_lang_Fr: buf.printf("mois"); break;
       case Catala_lang_Pl: buf.printf("miesiac"); break;
       };
-      if (abs(dc_period_months(x.v)) > 1 && catala_language == Catala_lang_En)
+      if (labs(dc_period_months(x.v)) > 1 && catala_language == Catala_lang_En)
         buf.printf("s");
       if (dc_period_days(x.v))
         buf.printf(", ");
     }
     if (dc_period_days(x.v) ||
         (!dc_period_years(x.v) && !dc_period_months(x.v))) {
-      buf.printf ("%d ", dc_period_days(x.v));
+      buf.printf ("%ld ", dc_period_days(x.v));
       switch (catala_language) {
       case Catala_lang_En: buf.printf("day"); break;
       case Catala_lang_Fr: buf.printf("jour"); break;
       case Catala_lang_Pl: buf.printf("dzien"); break;
       };
-      if (abs(dc_period_days(x.v)) > 1 && catala_language != Catala_lang_Pl)
+      if (labs(dc_period_days(x.v)) > 1 && catala_language != Catala_lang_Pl)
         buf.printf("s");
     }
     buf.printf("]");
@@ -860,7 +860,7 @@ void catala_tojson (struct catala_buf buf, const catala_value x) {
     buf.printf("\"%04d-%02d-%02d\"", dc_date_year(x.v), dc_date_month(x.v), dc_date_day(x.v));
     return;
   case DURATION:
-    buf.printf("{\"years\":%d,\"months\":%d,\"days\":%d}]", dc_period_years(x.v), dc_period_months(x.v), dc_period_days(x.v));
+    buf.printf("{\"years\":%ld,\"months\":%ld,\"days\":%ld}]", dc_period_years(x.v), dc_period_months(x.v), dc_period_days(x.v));
     return;
   case POSITION: {
     CATALA_POSITION pos = x.v;
@@ -1128,10 +1128,44 @@ CATALA_MONEY o_minus_mon (CATALA_MONEY x)
   return ret;
 }
 
-CATALA_DURATION o_minus_dur (CATALA_DURATION dur)
+/* The components of durations are long ints: a sum or difference that does
+   not fit is an error, not a wrapped value */
+static long int period_component (const catala_code_position* pos,
+                                  long int a, long int b, int negate_b)
+{
+  long int ret;
+  mpz_t r, z;
+  mpz_init_set_si(r, a);
+  mpz_init_set_si(z, b);
+  if (negate_b) mpz_sub(r, r, z); else mpz_add(r, r, z);
+  mpz_clear(z);
+  if (!mpz_fits_slong_p(r)) {
+    mpz_clear(r);
+    catala_error(catala_integer_overflow, pos, 1, NULL);
+  }
+  ret = mpz_get_si(r);
+  mpz_clear(r);
+  return ret;
+}
+
+static void checked_period (dc_period* ret, const catala_code_position* pos,
+                            const dc_period* x1, const dc_period* x2,
+                            int negate_x2)
+{
+  dc_make_period(ret,
+                 period_component(pos, x1 ? dc_period_years(x1) : 0,
+                                  dc_period_years(x2), negate_x2),
+                 period_component(pos, x1 ? dc_period_months(x1) : 0,
+                                  dc_period_months(x2), negate_x2),
+                 period_component(pos, x1 ? dc_period_days(x1) : 0,
+                                  dc_period_days(x2), negate_x2));
+}
+
+CATALA_DURATION o_minus_dur (const catala_code_position* pos,
+                             CATALA_DURATION dur)
 {
   dc_period* ret = catala_malloc(sizeof(dc_period));
-  dc_neg_period(ret, dur);
+  checked_period(ret, pos, NULL, dur, 1);
   return ret;
 }
 
@@ -1263,10 +1297,11 @@ CATALA_DATE o_add_dat_dur (dc_date_rounding mode,
   return ret;
 }
 
-CATALA_DURATION o_add_dur_dur (CATALA_DURATION x1, CATALA_DURATION x2)
+CATALA_DURATION o_add_dur_dur (const catala_code_position* pos,
+                               CATALA_DURATION x1, CATALA_DURATION x2)
 {
   dc_period *ret = catala_malloc(sizeof(dc_period));
-  dc_add_periods(ret, x1, x2);
+  checked_period(ret, pos, x1, x2, 0);
   return ret;
 }
 
@@ -1304,17 +1339,18 @@ CATALA_DATE o_sub_dat_dur (dc_date_rounding mode,
 {
   dc_period dur;
   dc_date *ret = catala_malloc(sizeof(dc_date));
-  dc_neg_period(&dur, x2);
+  checked_period(&dur, pos, NULL, x2, 1);
   if (dc_add_dates(ret, mode, x1, &dur) != dc_ok)
     catala_error(catala_date_error, pos, 1,
                  "ambiguous date computation with no rounding mode specified");
   return ret;
 }
 
-CATALA_DURATION o_sub_dur_dur (CATALA_DURATION x1, CATALA_DURATION x2)
+CATALA_DURATION o_sub_dur_dur (const catala_code_position* pos,
+                               CATALA_DURATION x1, CATALA_DURATION x2)
 {
   dc_period *ret = catala_malloc(sizeof(dc_period));
-  dc_sub_periods(ret, x1, x2);
+  checked_period(ret, pos, x1, x2, 1);
   return ret;
 }
 

@@ -1,0 +1,56 @@
+# Structure updates nested in structure updates
+
+```catala
+declaration enumeration Choice:
+  -- First
+  -- Second
+
+declaration structure Inner:
+  data choice content Choice
+  data amount content money
+
+declaration structure Outer:
+  data inner content Inner
+  data other content integer
+
+declaration flip content Outer
+  depends on o content Outer
+  equals
+    o but replace {
+      -- inner: o.inner but replace {
+        -- choice: match o.inner.choice with pattern
+          -- First: Second
+          -- Second: First } }
+
+#[test]
+declaration scope Nested:
+  output flipped content Outer
+  output pair content (Inner, integer)
+
+scope Nested:
+  definition flipped equals
+    flip of Outer {
+      -- inner: Inner { -- choice: First -- amount: $10 }
+      -- other: 3
+    }
+  definition pair equals
+    (flipped.inner but replace { -- amount: $1 }, flipped.other)
+```
+
+```catala-test-cli
+$ catala test-scope Nested
+┌─[RESULT]─ Nested ─
+│ flipped =
+│   Outer {
+│     -- inner: Inner {
+│       -- choice: Second
+│       -- amount: $10.00
+│     }
+│     -- other: 3
+│   }
+│ pair = (Inner {
+│           -- choice: Second
+│           -- amount: $1.00
+│         }, 3)
+└─
+```

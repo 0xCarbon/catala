@@ -155,9 +155,9 @@ let s : S_in.t -> S.t = fun s_in ->
          (Optional.Present
             ((match
                 (Optional.Present
-                   (let a__2 : bool = false in
-                    let a__3 : bool = (a__2 || true) in
-                    a__3, (loc.(1))))
+                   ((let a__2 : bool = false in
+                     let a__3 : bool = (a__2 || true) in
+                     a__3), (loc.(1))))
               with
               | Optional.Absent -> (raise (Error (NoValue, [loc.(0)], None)))
               | Optional.Present arg -> (let x, _ = arg in x)), (loc.(0))))

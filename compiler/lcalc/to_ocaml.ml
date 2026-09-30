@@ -322,8 +322,12 @@ let format_var (fmt : Format.formatter) (v : 'm Var.t) : unit =
 let rec needs_parens ?context (e : 'm expr) : bool =
   match Mark.remove e with
   | EApp { f = EAbs { binder; _ }, _; _ } -> (
+    (* A [let ... in] extends as far right as possible: inside a structure or a
+       tuple, it would take the following fields or components *)
     match context with
-    | Some ((EInj _ | EArray _ | EApp _ | EAppOp _), _) -> true
+    | Some ((EInj _ | EArray _ | EApp _ | EAppOp _ | EStruct _ | ETuple _), _)
+      ->
+      true
     | _ ->
       let _, body = Bindlib.unmbind binder in
       needs_parens ?context body)

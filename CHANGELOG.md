@@ -60,6 +60,10 @@ in behavior visible for the end-users of the tooling.
   did not terminate, and C and Java exhausted the stack); a resulting year
   beyond a machine integer raises `IntegerOverflow`.
 
+* Fix the OCaml backend: a structure update nested in a structure field or a
+  tuple (`o but replace { -- f: o.f but replace { ... } }`) generated OCaml
+  that did not compile (`Unbound value`); the interpreter accepted it.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

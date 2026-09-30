@@ -278,15 +278,16 @@ let assert__1 : Assert_in.t -> Assert.t = fun _ ->
     match
       (match
          (Optional.Present
-            (let _ : integer array =
-               (o_map
-                  (let assert__3 :
-                     Obj.t(*closure env*) -> integer -> integer =
-                     closure_assert
-                   in
-                   (assert__3, (o_toclosureenv ()))) ([|(integer_of_int 0)|]))
-             in
-             false, (loc.(1))))
+            ((let _ : integer array =
+                (o_map
+                   (let assert__3 :
+                      Obj.t(*closure env*) -> integer -> integer =
+                      closure_assert
+                    in
+                    (assert__3, (o_toclosureenv ())))
+                   ([|(integer_of_int 0)|]))
+              in
+              false), (loc.(1))))
        with
        | Optional.Absent -> (Optional.Present (false, (loc.(0))))
        | Optional.Present x -> (Optional.Present x))

@@ -1,0 +1,98 @@
+; The OCaml backend's runtime types and Value.from_json, against the
+; interpreter's reading of the same JSON inputs
+
+(rule
+ (targets from_json_e2e.ml from_json_e2e.mli)
+ (deps from_json_e2e.catala_en)
+ (action
+  (run
+   %{exe:../../../compiler/catala.exe}
+   ocaml
+   --no-stdlib
+   from_json_e2e.catala_en
+   -o
+   from_json_e2e.ml)))
+
+(executable
+ (name main)
+ (modules from_json_e2e main)
+ (flags
+  (:standard -w -a))
+ (libraries catala.runtime_ocaml))
+
+(rule
+ (with-stdout-to
+  compiled1.json
+  (with-stdin-from
+   input1.json
+   (run ./main.exe))))
+
+(rule
+ (with-stdout-to
+  compiled2.json
+  (with-stdin-from
+   input2.json
+   (run ./main.exe))))
+
+(rule
+ (with-stdout-to
+  compiled3.json
+  (with-stdin-from
+   input3.json
+   (run ./main.exe))))
+
+(rule
+ (deps from_json_e2e.catala_en input1.json)
+ (action
+  (with-stdout-to
+   interpreted1.json
+   (run
+    %{exe:../../../compiler/catala.exe}
+    interpret
+    --no-stdlib
+    --disable-warnings
+    from_json_e2e.catala_en
+    --scope=S
+    --input=input1.json
+    -F
+    json))))
+
+(rule
+ (deps from_json_e2e.catala_en input2.json)
+ (action
+  (with-stdout-to
+   interpreted2.json
+   (run
+    %{exe:../../../compiler/catala.exe}
+    interpret
+    --no-stdlib
+    --disable-warnings
+    from_json_e2e.catala_en
+    --scope=S
+    --input=input2.json
+    -F
+    json))))
+
+(rule
+ (deps from_json_e2e.catala_en input3.json)
+ (action
+  (with-stdout-to
+   interpreted3.json
+   (run
+    %{exe:../../../compiler/catala.exe}
+    interpret
+    --no-stdlib
+    --disable-warnings
+    from_json_e2e.catala_en
+    --scope=S
+    --input=input3.json
+    -F
+    json))))
+
+(rule
+ (alias runtest)
+ (action
+  (progn
+   (diff interpreted1.json compiled1.json)
+   (diff interpreted2.json compiled2.json)
+   (diff interpreted3.json compiled3.json))))

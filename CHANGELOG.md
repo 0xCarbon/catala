@@ -23,6 +23,14 @@ in behavior visible for the end-users of the tooling.
   that matches. Schema validators refused e.g. `{"amount": 12}` for money,
   which matched both the `integer` and the `number` alternatives.
 
+* OCaml runtime: `Value.from_json` reads values of every type (it was only
+  implemented for external types), in the forms accepted for scope inputs by
+  the interpreter. `Value.ty` describes how to build tuples, structures
+  (`build`) and enumerations (`cases`); arrays carry the type of their
+  elements. JSON literals `#[json = "..."] T` work for every named type in the
+  interpreter and the OCaml backend; the C, Java and Python runtimes still read
+  JSON literals of external types only.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

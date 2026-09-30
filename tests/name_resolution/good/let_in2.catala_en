@@ -100,7 +100,9 @@ module S = struct
   type t = { a: bool; }
   let rtype = Value.Struct {
     name = "S";
-    fields = fun t -> [ "a", Value.embed (Value.Bool) t.a; ]
+    fields = (fun t -> [ "a", Value.embed (Value.Bool) t.a; ]);
+    build = Value.Build (Value.Cons ("a", Value.Bool, Value.Nil), fun x0 ->
+                         {a = x0})
   }
 end
 
@@ -108,10 +110,28 @@ module S_in = struct
   type t = { a_in: ((bool * code_location)) Optional.t; }
   let rtype = Value.Struct {
     name = "S_in";
-    fields = fun t -> [
-      "a_in", Value.embed (Optional.rtype (Value.Tuple(fun (x0, x1) ->
-      [Value.embed (Value.Bool) x0; Value.embed (Value.Position) x1]))) t.a_in;
-    ]
+    fields = (fun t -> [
+      "a_in", Value.embed (Optional.rtype (Value.Tuple
+                                             ((fun (x0, x1) ->
+                                              [Value.embed (Value.Bool) x0;
+                                               Value.embed (Value.Position) x1]),
+                                              Value.Build
+                                              (Value.Cons ("0", Value.Bool,
+                                               Value.Cons ("1", Value.Position,
+                                               Value.Nil)), fun x0 x1 -> (x0,
+                                               x1))))) t.a_in;
+    ]);
+    build = Value.Build (Value.Cons ("a", Optional.rtype (Value.Tuple
+                                                            ((fun (x0, x1) ->
+                                                             [Value.embed (Value.Bool) x0;
+                                                              Value.embed (Value.Position) x1]),
+                                                             Value.Build
+                                                             (Value.Cons ("0", Value.Bool,
+                                                              Value.Cons ("1", Value.Position,
+                                                              Value.Nil)),
+                                                              fun x0
+                                                              x1 -> (x0, x1)))),
+                         Value.Nil), fun x0 -> {a_in = x0})
   }
 end
 

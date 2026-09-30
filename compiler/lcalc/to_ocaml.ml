@@ -217,20 +217,26 @@ let rec format_rtyp ppf ty =
   | TLit TDate -> Format.pp_print_string ppf "Value.Date"
   | TLit TDuration -> Format.pp_print_string ppf "Value.Duration"
   | TLit TPos -> Format.pp_print_string ppf "Value.Position"
-  | TArray ty ->
-    Format.fprintf ppf "Value.Array(Value.embed (%a))" format_rtyp ty
+  | TArray ty -> Format.fprintf ppf "Value.Array (%a)" format_rtyp ty
   | TTuple tl ->
     let vars = List.mapi (fun i ty -> "x" ^ string_of_int i, ty) tl in
-    Format.fprintf ppf "Value.Tuple(fun (@[<hov>%a@]) ->@ [@[<hov>%a@]])"
-      (Format.pp_print_list
-         ~pp_sep:(fun ppf () -> Format.fprintf ppf ",@ ")
-         (fun ppf (v, _) -> Format.pp_print_string ppf v))
-      vars
+    let pp_vars sep ppf =
+      Format.pp_print_list
+        ~pp_sep:(fun ppf () -> Format.fprintf ppf sep)
+        (fun ppf (v, _) -> Format.pp_print_string ppf v)
+        ppf vars
+    in
+    Format.fprintf ppf
+      "@[<hv 2>Value.Tuple@ (@[<hv>(fun (@[<hov>%t@]) ->@ [@[<hov>%a@]]),@ \
+       Value.Build@ (@[<hov>%a,@ fun %t -> (%t)@])@])@]"
+      (pp_vars ",@ ")
       (Format.pp_print_list
          ~pp_sep:(fun ppf () -> Format.fprintf ppf ";@ ")
          (fun ppf (v, ty) ->
            Format.fprintf ppf "Value.embed (%a) %s" format_rtyp ty v))
-      vars
+      vars format_components
+      (List.map (fun (v, ty) -> String.sub v 1 (String.length v - 1), ty) vars)
+      (pp_vars "@ ") (pp_vars ",@ ")
   | TStruct name ->
     Format.fprintf ppf "%a.rtype" format_to_module_name (`Sname name)
   | TEnum name ->
@@ -243,6 +249,15 @@ let rec format_rtyp ppf ty =
   | TDefault ((_, pos) as ty) ->
     format_rtyp ppf (TOption (TTuple [ty; TLit TPos, pos], pos), pos)
   | TError | TVar _ | TForAll _ -> Format.fprintf ppf "Value.Polymorphic"
+
+(** The components of a structure or tuple as a [Value.components] value *)
+and format_components ppf (labelled : (string * typ) list) =
+  List.iter
+    (fun (label, ty) ->
+      Format.fprintf ppf "Value.Cons (%S, %a,@ " label format_rtyp ty)
+    labelled;
+  Format.pp_print_string ppf "Value.Nil";
+  List.iter (fun _ -> Format.pp_print_char ppf ')') labelled
 
 let format_embedding (ppf : Format.formatter) (ty : typ) : unit =
   Format.fprintf ppf "Value.embed (%a)" format_rtyp ty
@@ -626,14 +641,51 @@ let format_ctx
     ppdef ppml;
     Format.fprintf ppml "@,@[<hv 2>let rtype = Value.Struct {";
     Format.fprintf ppml "@ name = %S;" (StructName.original_base struct_name);
-    Format.fprintf ppml "@ @[<hv 2>fields = fun t -> [";
+    Format.fprintf ppml "@ @[<hv 2>fields = (fun t -> [";
     StructField.Map.iter
       (fun fld ty ->
         Format.fprintf ppml "@ %S, %a t.%a;"
           (StructField.original_string fld)
           format_embedding ty StructField.format fld)
       struct_fields;
-    Format.fprintf ppml "@;<1 -2>]@]";
+    Format.fprintf ppml "@;<1 -2>]);@]";
+    (* The labels are the JSON keys of the fields: the interpreter reads the
+       fields of scope input structures without their [_in] suffix *)
+    let is_input_struct =
+      ScopeName.Map.exists
+        (fun _ { in_struct_name; _ } ->
+          StructName.equal struct_name in_struct_name)
+        ctx.ctx_scopes
+    in
+    let json_label fld =
+      let s = StructField.original_string fld in
+      if
+        is_input_struct
+        && String.ends_with ~suffix:"_in" s
+        && String.length s > 3
+      then String.sub s 0 (String.length s - 3)
+      else s
+    in
+    let fields = StructField.Map.bindings struct_fields in
+    let vars =
+      List.mapi (fun i (fld, _) -> Printf.sprintf "x%d" i, fld) fields
+    in
+    Format.fprintf ppml "@ @[<hv 2>build = Value.Build (@[<hov>%a,@ %t@])@]"
+      format_components
+      (List.map (fun (fld, ty) -> json_label fld, ty) fields)
+      (fun ppf ->
+        if fields = [] then Format.pp_print_string ppf "()"
+        else
+          Format.fprintf ppf "fun %a ->@ {@[<hov>%a@]}"
+            (Format.pp_print_list ~pp_sep:Format.pp_print_space
+               (fun ppf (v, _) -> Format.pp_print_string ppf v))
+            vars
+            (Format.pp_print_list
+               ~pp_sep:(fun ppf () -> Format.fprintf ppf ";@ ")
+               (fun ppf (v, fld) ->
+                 Format.fprintf ppf "%a = %s" format_struct_field_name
+                   (None, fld) v))
+            vars);
     Format.fprintf ppml "@;<1 -2>}@]";
     Format.fprintf ppml "@;<1 -2>end@]@,@,";
     if TypeIdent.(Set.mem (Struct struct_name) ctx.ctx_public_types) then (
@@ -661,7 +713,7 @@ let format_ctx
     ppdef ppml;
     Format.fprintf ppml "@,@[<hv 2>let rtype = Value.Enum {";
     Format.fprintf ppml "@ name = %S;" (EnumName.original_base enum_name);
-    Format.fprintf ppml "@ @[<v 2>constr = function";
+    Format.fprintf ppml "@ @[<v 2>constr = (function";
     List.iteri
       (fun i (constr, ty) ->
         match ty with
@@ -676,7 +728,20 @@ let format_ctx
             (EnumConstructor.original_string constr)
             format_embedding ty)
       (EnumConstructor.Map.bindings enum_cons);
-    Format.fprintf ppml "@]";
+    Format.fprintf ppml ");@]";
+    Format.fprintf ppml "@ @[<hv 2>cases = [";
+    EnumConstructor.Map.iter
+      (fun constr -> function
+        | TLit TUnit, _ ->
+          Format.fprintf ppml "@ Value.Case (%S, Value.Unit, fun () -> %a);"
+            (EnumConstructor.original_string constr)
+            format_enum_cons_name constr
+        | ty ->
+          Format.fprintf ppml "@ Value.Case (%S, %a, fun x -> %a x);"
+            (EnumConstructor.original_string constr)
+            format_rtyp ty format_enum_cons_name constr)
+      enum_cons;
+    Format.fprintf ppml "@;<1 -2>]@]";
     Format.fprintf ppml "@;<1 -2>}@]";
     Format.fprintf ppml "@;<1 -2>end@]@,@,";
     if TypeIdent.(Set.mem (Enum enum_name) ctx.ctx_public_types) then (

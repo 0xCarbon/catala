@@ -153,8 +153,10 @@ module Value : sig
     val from_json : code_location -> string -> t
   end
 
-  (** 'a ty provides runtime information about the structure of values of OCaml
-      type 'a *)
+  (** ['a ty] provides runtime information about the structure of values of
+      OCaml type ['a]: enough to inspect them (equality, printing, JSON output)
+      and, when built by the OCaml backend, to build them from JSON
+      ({!from_json}). *)
   type _ ty =
     | Unit : unit ty
     | Bool : bool ty
@@ -164,34 +166,68 @@ module Value : sig
     | Date : date ty
     | Duration : duration ty
     | Position : code_location ty
-    | Array : ('a -> t) -> 'a array ty
-    | Tuple : ('a -> t list) -> 'a ty
+    | Array : 'a ty -> 'a array ty
+    | Tuple : ('a -> t list) * 'a build -> 'a ty
+        (** The components of a tuple, and how to build one *)
     | Struct : {
         name : string;
         fields : 'a -> (string * t) list;
-            (* list order must be consistent with the representation *)
+            (** list order must be consistent with the representation *)
+        build : 'a build;
+            (** The labels of its components are the JSON keys of the fields
+                (without the [_in] suffix of scope input fields) *)
       }
         -> 'a ty
     | Enum : {
         name : string;
         constr : 'a -> int * string * t option;
-            (* destr: string * t option -> 'a; ? *)
+        cases : 'a case list;
+            (** How to build each constructor; constant constructors have a
+                [Unit] content *)
       }
         -> 'a ty
     | External : (module External with type t = 'a) -> 'a ty
     | Function : 'a ty
     | Polymorphic : 'a ty
-  (* | Function : (('args -> 'ret) -> 'args -> t ) -> ('args -> 'ret) ty *)
+    | Dynamic : t ty
+        (** Values that are already embedded, e.g. elements of an array of
+            values of different types built by the interpreter *)
+
+  (** How to build a tuple or a structure from its components *)
+  and 'a build =
+    | Build : ('f, 'a) components * 'f -> 'a build
+        (** The components and a function taking them in order *)
+    | Unbuildable : 'a build
+        (** For values assembled dynamically, that cannot be read from JSON *)
+
+  and (_, _) components =
+    | Nil : ('a, 'a) components
+    | Cons : string * 'c ty * ('f, 'a) components -> ('c -> 'f, 'a) components
+
+  and 'a case =
+    | Case : string * 'c ty * ('c -> 'a) -> 'a case
+        (** Constructor name, type of its content and constructor function *)
 
   (** [Runtime.Value.t] is an embedded runtime value that comes with type
       information, allowing for introspection *)
   and t = V : 'a ty * 'a -> t
 
+  exception Invalid_json of code_location * string
+  (** Raised by {!from_json} on a JSON text that does not denote a value of the
+      expected type *)
+
   val embed : 'a ty -> 'a -> t
   val equal : code_location -> t -> t -> bool
   val compare : code_location -> t -> t -> int
   val format : Format.formatter -> t -> unit
+
   val from_json : 'a ty -> code_location -> string -> 'a
+  (** [from_json ty pos text] reads a value of type [ty] from a JSON text, in
+      the forms accepted for scope inputs by the interpreter: numbers are read
+      exactly from their literal, fields of optional types may be omitted, and a
+      value with its position is given as the value alone. Raises
+      [Invalid_json]; raises [Invalid_argument] for types that have no JSON form
+      (functions, or values built without [Build] information). *)
 end
 
 val equal : 'a Value.ty -> code_location -> 'a -> 'a -> bool

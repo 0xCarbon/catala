@@ -94,7 +94,9 @@ module Stdlib__1 = struct
   type t = { when__1: date; }
   let rtype = Value.Struct {
     name = "Stdlib";
-    fields = fun t -> [ "when", Value.embed (Value.Date) t.when__1; ]
+    fields = (fun t -> [ "when", Value.embed (Value.Date) t.when__1; ]);
+    build = Value.Build (Value.Cons ("when", Value.Date, Value.Nil),
+                         fun x0 -> {when__1 = x0})
   }
 end
 
@@ -102,7 +104,9 @@ module Test = struct
   type t = { val__1: date; }
   let rtype = Value.Struct {
     name = "Test";
-    fields = fun t -> [ "val", Value.embed (Value.Date) t.val__1; ]
+    fields = (fun t -> [ "val", Value.embed (Value.Date) t.val__1; ]);
+    build = Value.Build (Value.Cons ("val", Value.Date, Value.Nil), fun x0 ->
+                         {val__1 = x0})
   }
 end
 
@@ -110,13 +114,19 @@ module Stdlib_in = struct
   type t = { val_in: integer; }
   let rtype = Value.Struct {
     name = "Stdlib_in";
-    fields = fun t -> [ "val_in", Value.embed (Value.Integer) t.val_in; ]
+    fields = (fun t -> [ "val_in", Value.embed (Value.Integer) t.val_in; ]);
+    build = Value.Build (Value.Cons ("val", Value.Integer, Value.Nil),
+                         fun x0 -> {val_in = x0})
   }
 end
 
 module Test_in = struct
   type t = unit
-  let rtype = Value.Struct { name = "Test_in"; fields = fun t -> [ ] }
+  let rtype = Value.Struct {
+    name = "Test_in";
+    fields = (fun t -> [ ]);
+    build = Value.Build (Value.Nil, ())
+  }
 end
 
 

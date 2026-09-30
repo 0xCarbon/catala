@@ -318,7 +318,9 @@ let rec evaluate_operator
             (Expr.pos_to_runtime (Expr.mark_pos m))
             str))
     |> Mark.remove
-  | ValueFromJson _, _ -> failwith "todo"
+  | ValueFromJson (ty, str), [(ELit LUnit, _)] ->
+    Mark.remove (json_literal_value ctx m pos ty str)
+  | ValueFromJson _, _ -> err ()
   | ( ( Minus_int | Minus_rat | Minus_mon | Minus_dur | ToInt_rat | ToInt_mon
       | ToRat_int | ToRat_mon | ToMoney_rat | ToMoney_int | Round_rat
       | Round_mon | Add_int_int | Add_rat_rat | Add_mon_mon | Add_dat_dur _
@@ -329,6 +331,99 @@ let rec evaluate_operator
       | HandleExceptions | DebugPrint _ ),
       _ ) ->
     err ()
+
+and json_literal_value : type d r c.
+    decl_ctx ->
+    'm mark ->
+    Pos.t ->
+    typ ->
+    string ->
+    ((d, r, c) interpr_kind, 'm) gexpr =
+ fun ctx m pos ty str ->
+  (* Read with the encoding of scope inputs; compiled programs read the same
+     forms with [Catala_runtime.Value.from_json] *)
+  json_value_to_expr ctx m ty
+    (Encoding.parse_json ~pos (Encoding.make_encoding ctx ty) str)
+
+(* The term of a value read from a JSON literal. The types of JSON literals hold
+   no positions nor defaults, so the term is the same in every calculus. *)
+and json_value_to_expr : type d r c.
+    decl_ctx ->
+    'm mark ->
+    typ ->
+    Runtime.Value.t ->
+    ((d, r, c) interpr_kind, 'm) gexpr =
+ fun ctx m ty v ->
+  let m = Expr.map_ty (fun _ -> ty) m in
+  let unit () =
+    ELit LUnit, Expr.map_ty (fun _ -> TLit TUnit, Expr.mark_pos m) m
+  in
+  let mismatch () =
+    Message.error ~internal:true ~pos:(Expr.mark_pos m)
+      "JSON value %a does not have type %a" Runtime.Value.format v Print.typ ty
+  in
+  let open Runtime.Value in
+  match Mark.remove ty, v with
+  | TLit TUnit, V (Unit, ()) -> unit ()
+  | TLit TBool, V (Bool, b) -> ELit (LBool b), m
+  | TLit TInt, V (Integer, z) -> ELit (LInt z), m
+  | TLit TRat, V (Decimal, q) -> ELit (LRat q), m
+  | TLit TMoney, V (Money, z) -> ELit (LMoney z), m
+  | TLit TDate, V (Date, d) -> ELit (LDate d), m
+  | TLit TDuration, V (Duration, d) -> ELit (LDuration d), m
+  | TTuple ts, V (Tuple (components, _), x) ->
+    let xs = components x in
+    if List.compare_lengths ts xs <> 0 then mismatch ();
+    ETuple (List.map2 (json_value_to_expr ctx m) ts xs), m
+  | TArray t, V (Array elt, a) ->
+    ( EArray
+        (Array.to_list
+           (Array.map (fun x -> json_value_to_expr ctx m t (embed elt x)) a)),
+      m )
+  | TStruct name, V (Struct { fields; _ }, x) ->
+    let given = fields x in
+    let fields =
+      StructField.Map.mapi
+        (fun fld t ->
+          match List.assoc_opt (StructField.original_string fld) given with
+          | Some v -> json_value_to_expr ctx m t v
+          | None -> mismatch ())
+        (StructName.Map.find name ctx.ctx_structs)
+    in
+    EStruct { name; fields }, m
+  | TOption t, V (Enum { constr; _ }, x) -> (
+    match constr x with
+    | _, _, None ->
+      ( EInj
+          {
+            name = ConstantNames.option_enum;
+            cons = ConstantNames.none_constr;
+            e = unit ();
+          },
+        m )
+    | _, _, Some v ->
+      ( EInj
+          {
+            name = ConstantNames.option_enum;
+            cons = ConstantNames.some_constr;
+            e = json_value_to_expr ctx m t v;
+          },
+        m ))
+  | TEnum name, V (Enum { constr; _ }, x) -> (
+    let _, cstr, payload = constr x in
+    match
+      EnumConstructor.Map.bindings (EnumName.Map.find name ctx.ctx_enums)
+      |> List.find_opt (fun (c, _) -> EnumConstructor.original_string c = cstr)
+    with
+    | None -> mismatch ()
+    | Some (cons, t) ->
+      let e =
+        match payload with
+        | None -> unit ()
+        | Some v -> json_value_to_expr ctx m t v
+      in
+      EInj { name; cons; e }, m)
+  | _ -> mismatch ()
 
 (* /S\ dark magic here. This relies both on internals of [Lcalc.to_ocaml] *and*
    of the OCaml runtime *)

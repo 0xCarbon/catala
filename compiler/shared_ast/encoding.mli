@@ -71,7 +71,8 @@ val scope_output_encoding :
 (** Same as [make_encoding] but adds a title and a description to the generated
     JSON-schema expliciting that this represent a scope output structure. *)
 
-val parse_json : Value.t Json_encoding.encoding -> string -> Value.t
+val parse_json :
+  ?pos:Catala_utils.Pos.t -> Value.t Json_encoding.encoding -> string -> Value.t
 (** Parse a JSON text using the given encoding as validation schema. *)
 
 val convert_to_dcalc :

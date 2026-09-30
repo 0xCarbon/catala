@@ -1097,7 +1097,7 @@ module UserFacing = struct
         cons,
         match payload with ELit LUnit, _ -> None | e -> Some (embed_value e) )
     in
-    V.V (Enum { name; constr }, (constr_index, cons, payload))
+    V.V (Enum { name; constr; cases = [] }, (constr_index, cons, payload))
 
   (* this is a dumbed-down version of [Expr.embed_value] that doesn't require a
      context but won't document indexes of variant constructors correctly ; we
@@ -1124,11 +1124,11 @@ module UserFacing = struct
             end_column = Pos.get_end_column v;
             law_headings = Pos.get_law_info v;
           } )
-    | EArray el -> V.V (Array embed_value, Array.of_list el)
+    | EArray el -> V.V (Array Dynamic, Array.of_list (List.map embed_value el))
     | ETuple [(EAbs { tys = (TClosureEnv, _) :: _; _ }, _); _] ->
       (* Closure *)
       V.V (Function, ignore)
-    | ETuple el -> V.V (Tuple (List.map embed_value), el)
+    | ETuple el -> V.V (Tuple (List.map embed_value, Unbuildable), el)
     | EStruct { name; fields } ->
       V.V
         ( Struct
@@ -1137,6 +1137,7 @@ module UserFacing = struct
               fields =
                 List.map (fun (name, e) ->
                     StructField.original_string name, embed_value e);
+              build = Unbuildable;
             },
           StructField.Map.bindings fields )
     | EInj { name; cons; e = payload }
@@ -1154,6 +1155,7 @@ module UserFacing = struct
                     match payload with
                     | ELit LUnit, _ -> None
                     | e -> Some (embed_value e) ));
+              cases = [];
             },
           (-1 (* this is fake *), cons, payload) )
     | EAbs _ -> V.V (Function, ignore (* fake *))

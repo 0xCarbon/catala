@@ -32,6 +32,18 @@ val evaluate_operator :
     used to evaluate expressions and called when reducing e.g. the [map]
     operator. *)
 
+val json_literal_value :
+  decl_ctx ->
+  'm mark ->
+  Pos.t ->
+  typ ->
+  string ->
+  ((_, _, _) interpr_kind, 'm) gexpr
+(** [json_literal_value ctx m pos ty json] is the value of the JSON literal
+    [json] ([#[json = "..."] ty]) of a type that is not external, read with the
+    encoding of scope inputs; errors are reported at [pos]. Values of external
+    types are read by their runtime's [Value.from_json]. *)
+
 val evaluate_expr :
   decl_ctx ->
   Global.backend_lang ->

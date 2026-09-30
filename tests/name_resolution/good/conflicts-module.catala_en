@@ -76,7 +76,9 @@ module Closure_scoppe = struct
   type t = { scoppe: bool; }
   let rtype = Value.Struct {
     name = "Closure_sc/195/184ppe";
-    fields = fun t -> [ "scoppe", Value.embed (Value.Bool) t.scoppe; ]
+    fields = (fun t -> [ "scoppe", Value.embed (Value.Bool) t.scoppe; ]);
+    build = Value.Build (Value.Cons ("scoppe", Value.Bool, Value.Nil),
+                         fun x0 -> {scoppe = x0})
   }
 end
 
@@ -84,7 +86,9 @@ module Closure_scoppe__1 = struct
   type t = { scoppe: bool; }
   let rtype = Value.Struct {
     name = "Closure_scoppe__1";
-    fields = fun t -> [ "scoppe", Value.embed (Value.Bool) t.scoppe; ]
+    fields = (fun t -> [ "scoppe", Value.embed (Value.Bool) t.scoppe; ]);
+    build = Value.Build (Value.Cons ("scoppe", Value.Bool, Value.Nil),
+                         fun x0 -> {scoppe = x0})
   }
 end
 
@@ -92,7 +96,8 @@ module Closure_scoppe_in = struct
   type t = unit
   let rtype = Value.Struct {
     name = "Closure_sc/195/184ppe_in";
-    fields = fun t -> [ ]
+    fields = (fun t -> [ ]);
+    build = Value.Build (Value.Nil, ())
   }
 end
 
@@ -100,7 +105,8 @@ module Closure_scoppe__1_in = struct
   type t = unit
   let rtype = Value.Struct {
     name = "Closure_scoppe__1_in";
-    fields = fun t -> [ ]
+    fields = (fun t -> [ ]);
+    build = Value.Build (Value.Nil, ())
   }
 end
 
@@ -223,7 +229,9 @@ module Closure_scoppe = struct
   type t = { scoppe: bool; }
   let rtype = Value.Struct {
     name = "Closure_sc/195/184ppe";
-    fields = fun t -> [ "scoppe", Value.embed (Value.Bool) t.scoppe; ]
+    fields = (fun t -> [ "scoppe", Value.embed (Value.Bool) t.scoppe; ]);
+    build = Value.Build (Value.Cons ("scoppe", Value.Bool, Value.Nil),
+                         fun x0 -> {scoppe = x0})
   }
 end
 
@@ -231,7 +239,9 @@ module Closure_scoppe__1 = struct
   type t = { scoppe: bool; }
   let rtype = Value.Struct {
     name = "Closure_scoppe__1";
-    fields = fun t -> [ "scoppe", Value.embed (Value.Bool) t.scoppe; ]
+    fields = (fun t -> [ "scoppe", Value.embed (Value.Bool) t.scoppe; ]);
+    build = Value.Build (Value.Cons ("scoppe", Value.Bool, Value.Nil),
+                         fun x0 -> {scoppe = x0})
   }
 end
 
@@ -239,7 +249,8 @@ module Closure_scoppe_in = struct
   type t = unit
   let rtype = Value.Struct {
     name = "Closure_sc/195/184ppe_in";
-    fields = fun t -> [ ]
+    fields = (fun t -> [ ]);
+    build = Value.Build (Value.Nil, ())
   }
 end
 
@@ -247,7 +258,8 @@ module Closure_scoppe__1_in = struct
   type t = unit
   let rtype = Value.Struct {
     name = "Closure_scoppe__1_in";
-    fields = fun t -> [ ]
+    fields = (fun t -> [ ]);
+    build = Value.Build (Value.Nil, ())
   }
 end
 
@@ -258,7 +270,7 @@ let loc : code_location array =
      start_line=5; start_column=10; end_line=5; end_column=16;
      law_headings=[]};
     {filename="tests/name_resolution/good/conflicts-module.catala_en";
-     start_line=145; start_column=15; end_line=145; end_column=24;
+     start_line=151; start_column=15; end_line=151; end_column=24;
      law_headings=[]}|]
 
 (* Toplevel def closure_scoppe *)

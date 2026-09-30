@@ -216,7 +216,11 @@ module Assert_in__1 = struct
   type t = { assert__1: integer; }
   let rtype = Value.Struct {
     name = "Assert_in";
-    fields = fun t -> [ "assert", Value.embed (Value.Integer) t.assert__1; ]
+    fields = (fun t -> [
+      "assert", Value.embed (Value.Integer) t.assert__1;
+    ]);
+    build = Value.Build (Value.Cons ("assert", Value.Integer, Value.Nil),
+                         fun x0 -> {assert__1 = x0})
   }
 end
 
@@ -224,7 +228,11 @@ module Assert__1 = struct
   type t = { assert__1: integer; }
   let rtype = Value.Struct {
     name = "Assert__1";
-    fields = fun t -> [ "assert", Value.embed (Value.Integer) t.assert__1; ]
+    fields = (fun t -> [
+      "assert", Value.embed (Value.Integer) t.assert__1;
+    ]);
+    build = Value.Build (Value.Cons ("assert", Value.Integer, Value.Nil),
+                         fun x0 -> {assert__1 = x0})
   }
 end
 
@@ -232,13 +240,19 @@ module Assert = struct
   type t = { assert__1: bool; }
   let rtype = Value.Struct {
     name = "Assert";
-    fields = fun t -> [ "assert", Value.embed (Value.Bool) t.assert__1; ]
+    fields = (fun t -> [ "assert", Value.embed (Value.Bool) t.assert__1; ]);
+    build = Value.Build (Value.Cons ("assert", Value.Bool, Value.Nil),
+                         fun x0 -> {assert__1 = x0})
   }
 end
 
 module Assert_in = struct
   type t = unit
-  let rtype = Value.Struct { name = "Assert_in"; fields = fun t -> [ ] }
+  let rtype = Value.Struct {
+    name = "Assert_in";
+    fields = (fun t -> [ ]);
+    build = Value.Build (Value.Nil, ())
+  }
 end
 
 

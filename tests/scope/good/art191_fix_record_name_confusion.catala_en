@@ -95,7 +95,9 @@ module ScopeA = struct
   type t = { a: bool; }
   let rtype = Value.Struct {
     name = "ScopeA";
-    fields = fun t -> [ "a", Value.embed (Value.Bool) t.a; ]
+    fields = (fun t -> [ "a", Value.embed (Value.Bool) t.a; ]);
+    build = Value.Build (Value.Cons ("a", Value.Bool, Value.Nil), fun x0 ->
+                         {a = x0})
   }
 end
 
@@ -103,18 +105,28 @@ module ScopeB = struct
   type t = { a: bool; }
   let rtype = Value.Struct {
     name = "ScopeB";
-    fields = fun t -> [ "a", Value.embed (Value.Bool) t.a; ]
+    fields = (fun t -> [ "a", Value.embed (Value.Bool) t.a; ]);
+    build = Value.Build (Value.Cons ("a", Value.Bool, Value.Nil), fun x0 ->
+                         {a = x0})
   }
 end
 
 module ScopeA_in = struct
   type t = unit
-  let rtype = Value.Struct { name = "ScopeA_in"; fields = fun t -> [ ] }
+  let rtype = Value.Struct {
+    name = "ScopeA_in";
+    fields = (fun t -> [ ]);
+    build = Value.Build (Value.Nil, ())
+  }
 end
 
 module ScopeB_in = struct
   type t = unit
-  let rtype = Value.Struct { name = "ScopeB_in"; fields = fun t -> [ ] }
+  let rtype = Value.Struct {
+    name = "ScopeB_in";
+    fields = (fun t -> [ ]);
+    build = Value.Build (Value.Nil, ())
+  }
 end
 
 

@@ -706,27 +706,50 @@ module Value = struct
     | Date : date ty
     | Duration : duration ty
     | Position : code_location ty
-    | Array : ('a -> t) -> 'a array ty
-    | Tuple : ('a -> t list) -> 'a ty
+    | Array : 'a ty -> 'a array ty
+    | Tuple : ('a -> t list) * 'a build -> 'a ty
     | Struct : {
         name : string;
         fields : 'a -> (string * t) list;
             (* list order must be consistent with the representation *)
+        build : 'a build;
       }
         -> 'a ty
     | Enum : {
         name : string;
         constr : 'a -> int * string * t option;
-            (* destr: string * t option -> 'a; ? *)
+        cases : 'a case list;
       }
         -> 'a ty
     | External : (module External with type t = 'a) -> 'a ty
     | Function : 'a ty
     | Polymorphic : 'a ty
+    | Dynamic : t ty
 
+  and 'a build =
+    | Build : ('f, 'a) components * 'f -> 'a build
+    | Unbuildable : 'a build
+
+  and (_, _) components =
+    | Nil : ('a, 'a) components
+    | Cons : string * 'c ty * ('f, 'a) components -> ('c -> 'f, 'a) components
+
+  and 'a case = Case : string * 'c ty * ('c -> 'a) -> 'a case
   and t = V : 'a ty * 'a -> t
 
-  let embed t v = V (t, v)
+  let embed : type a. a ty -> a -> t =
+   fun t v -> match t with Dynamic -> v | t -> V (t, v)
+
+  exception Invalid_json of code_location * string
+
+  let () =
+    Printexc.register_printer
+    @@ function
+    | Invalid_json (pos, msg) ->
+      Some
+        (Printf.sprintf "At %s:%d.%d-%d.%d: invalid JSON value: %s" pos.filename
+           pos.start_line pos.start_column pos.end_line pos.end_column msg)
+    | _ -> None
 
   (* let unembed (type a) (V { t; v }): a ty * a =
    *   Obj.magic t, Obj.magic v *)
@@ -734,6 +757,8 @@ module Value = struct
   let rec equal : code_location -> t -> t -> bool =
    fun pos rv1 rv2 ->
     match rv1, rv2 with
+    | V (Dynamic, v1), v2 -> equal pos v1 v2
+    | v1, V (Dynamic, v2) -> equal pos v1 v2
     | V (Unit, ()), V (Unit, ()) -> true
     | V (Bool, v1), V (Bool, v2) -> equal_values Bool pos v1 v2
     | V (Integer, v1), V (Integer, v2) -> equal_values Integer pos v1 v2
@@ -744,8 +769,10 @@ module Value = struct
     | V (Position, v1), V (Position, v2) -> equal_values Position pos v1 v2
     | V (Array t1, v1), V (Array t2, v2) ->
       Array.length v1 = Array.length v2
-      && Array.for_all2 (equal pos) (Array.map t1 v1) (Array.map t2 v2)
-    | V (Tuple t1, v1), V (Tuple t2, v2) ->
+      && Array.for_all2 (equal pos)
+           (Array.map (embed t1) v1)
+           (Array.map (embed t2) v2)
+    | V (Tuple (t1, _), v1), V (Tuple (t2, _), v2) ->
       List.for_all2 (equal pos) (t1 v1) (t2 v2)
     | V (Struct str1, v1), V (Struct str2, v2) ->
       str1.name = str2.name
@@ -798,6 +825,8 @@ module Value = struct
       | _, [] -> 1
     in
     match rv1, rv2 with
+    | V (Dynamic, v1), v2 -> compare pos v1 v2
+    | v1, V (Dynamic, v2) -> compare pos v1 v2
     | V (Unit, ()), V (Unit, ()) -> 0
     | V (Bool, v1), V (Bool, v2) -> compare_values Bool pos v1 v2
     | V (Integer, v1), V (Integer, v2) -> compare_values Integer pos v1 v2
@@ -810,12 +839,12 @@ module Value = struct
         if i >= Array.length v1 then if i >= Array.length v2 then 0 else -1
         else if i >= Array.length v2 then 1
         else
-          match compare pos (t1 v1.(i)) (t2 v2.(i)) with
+          match compare pos (embed t1 v1.(i)) (embed t2 v2.(i)) with
           | 0 -> aux (i + 1)
           | n -> n
       in
       aux 0
-    | V (Tuple to_list1, v1), V (Tuple to_list2, v2) ->
+    | V (Tuple (to_list1, _), v1), V (Tuple (to_list2, _), v2) ->
       compare_lists (to_list1 v1) (to_list2 v2)
     | V (Struct str1, v1), V (Struct str2, v2) -> (
       match String.compare str1.name str2.name with
@@ -918,11 +947,13 @@ module Value = struct
       | V (Array t, v) ->
         Format.pp_print_char ppf '[';
         Array.iter
-          (fun v -> Format.fprintf ppf "%t%a;" (nl 2) (aux (indent + 2)) (t v))
+          (fun v ->
+            Format.fprintf ppf "%t%a;" (nl 2) (aux (indent + 2)) (embed t v))
           v;
         if Array.length v > 0 then nl 0 ppf;
         Format.pp_print_string ppf "]"
-      | V (Tuple destr, v) ->
+      | V (Dynamic, v) -> aux indent ppf v
+      | V (Tuple (destr, _), v) ->
         Format.fprintf ppf "(%a)"
           (Format.pp_print_list
              ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ")
@@ -939,9 +970,292 @@ module Value = struct
     aux 0 ppf v;
     Format.pp_close_box ppf ()
 
-  let from_json : type a. a ty -> code_location -> string -> a = function
-    | External (module E) -> E.from_json
-    | _ -> failwith "todo"
+  let is_optional_name = function
+    | "Optional" | "Optionnel" | "Opcjonalny" -> true
+    | _ -> false
+
+  let is_unit : type a. a ty -> bool = function Unit -> true | _ -> false
+
+  let is_optional : type a. a ty -> bool = function
+    | Enum { name; _ } -> is_optional_name name
+    | _ -> false
+
+  (* Reads the JSON forms accepted for scope inputs by the interpreter
+     (compiler/shared_ast/encoding.ml), so that compiled programs and the
+     interpreter agree on every input. *)
+  let from_json : type a. a ty -> code_location -> string -> a =
+   fun ty pos text ->
+    let fail path fmt =
+      Printf.ksprintf
+        (fun msg ->
+          raise
+            (Invalid_json
+               ( pos,
+                 if path = "" then msg else Printf.sprintf "at %s, %s" path msg
+               )))
+        fmt
+    in
+    let kind : ParsedJson.t -> string = function
+      | Null -> "null"
+      | Bool _ -> "a boolean"
+      | Number _ -> "a number"
+      | String _ -> "a string"
+      | Array _ -> "an array"
+      | Object _ -> "an object"
+    in
+    (* Numbers are read strictly and exactly, as by the interpreter *)
+    let numeric path what ~of_number ~of_string (j : ParsedJson.t) =
+      match j with
+      | Number n -> (
+        match of_number n with
+        | Some v -> v
+        | None -> fail path "expected %s, got the number %s" what n)
+      | String s -> (
+        match of_string s with
+        | Some v -> v
+        | None -> fail path "expected %s, got the string %S" what s)
+      | j -> fail path "expected %s, got %s" what (kind j)
+    in
+    (* An object with keys among [keys]: returns its lookup function *)
+    let fields path keys (j : ParsedJson.t) =
+      match j with
+      | Object kv ->
+        List.iter
+          (fun (k, _) ->
+            if not (List.mem k keys) then fail path "unexpected field %S" k)
+          kv;
+        fun k -> List.assoc_opt k kv
+      | j -> fail path "expected an object, got %s" (kind j)
+    in
+    let req path get k =
+      match get k with Some v -> v | None -> fail path "missing field %S" k
+    in
+    let int_in path lo hi (j : ParsedJson.t) =
+      match j with
+      | Number n -> (
+        match ParsedJson.integer_of_number n with
+        | Some z when Z.geq z (Z.of_int lo) && Z.leq z (Z.of_int hi) ->
+          Z.to_int z
+        | _ -> fail path "expected an integer in [%d, %d], got %s" lo hi n)
+      | j -> fail path "expected an integer, got %s" (kind j)
+    in
+    let no_json name =
+      invalid_arg
+        (Printf.sprintf "Value.from_json: %s values cannot be read from JSON"
+           name)
+    in
+    let rec decode : type a. a ty -> string -> ParsedJson.t -> a =
+     fun ty path j ->
+      match ty with
+      | Unit -> (
+        match j with
+        | Object [] -> ()
+        | j -> fail path "expected {}, got %s" (kind j))
+      | Bool -> (
+        match j with
+        | Bool b -> b
+        | j -> fail path "expected a boolean, got %s" (kind j))
+      | Integer ->
+        numeric path "an integer" j ~of_number:ParsedJson.integer_of_number
+          ~of_string:ParsedJson.integer_of_string
+      | Money ->
+        (* Amounts are in units; digits beyond the cent are truncated *)
+        let money q = Q.to_bigint (Q.mul q q100) in
+        numeric path "money" j
+          ~of_number:(fun n ->
+            Option.map money (ParsedJson.decimal_of_string n))
+          ~of_string:(fun s ->
+            if ParsedJson.is_number_literal s then
+              Option.map money (ParsedJson.decimal_of_string s)
+            else None)
+      | Decimal ->
+        numeric path "a decimal" j ~of_number:ParsedJson.decimal_of_string
+          ~of_string:ParsedJson.decimal_of_string
+      | Date -> (
+        match j with
+        | String s -> (
+          try Dates_calc.date_of_string s
+          with
+          | Invalid_argument _ | Failure _ | End_of_file
+          | Dates_calc.InvalidDate
+          ->
+            fail path "invalid date %S" s)
+        | Object _ -> (
+          let get = fields path ["year"; "month"; "day"] j in
+          let comp k lo hi = int_in (path ^ "/" ^ k) lo hi (req path get k) in
+          let year = comp "year" 0 9999 in
+          let month = comp "month" 1 12 in
+          let day = comp "day" 1 31 in
+          try Dates_calc.make_date ~year ~month ~day
+          with Dates_calc.InvalidDate -> fail path "invalid date")
+        | j -> fail path "expected a date, got %s" (kind j))
+      | Duration ->
+        let get = fields path ["years"; "months"; "days"] j in
+        let comp k =
+          match get k with
+          | None -> 0
+          | Some v -> int_in (path ^ "/" ^ k) (-(1 lsl 30)) ((1 lsl 30) - 1) v
+        in
+        let years = comp "years" in
+        let months = comp "months" in
+        let days = comp "days" in
+        Dates_calc.make_period ~years ~months ~days
+      | Position ->
+        let get = fields path ["file"; "range"] j in
+        let filename =
+          match req path get "file" with
+          | String s -> s
+          | j -> fail (path ^ "/file") "expected a string, got %s" (kind j)
+        in
+        let rpath = path ^ "/range" in
+        let rget = fields rpath ["start"; "end"] (req path get "range") in
+        let point k =
+          let ppath = rpath ^ "/" ^ k in
+          let get = fields ppath ["line"; "character"] (req rpath rget k) in
+          let comp k =
+            int_in
+              (ppath ^ "/" ^ k)
+              (Int32.to_int Int32.min_int)
+              (Int32.to_int Int32.max_int)
+              (req ppath get k)
+          in
+          let line = comp "line" in
+          line, comp "character"
+        in
+        let start_line, start_column = point "start" in
+        let end_line, end_column = point "end" in
+        {
+          filename;
+          start_line;
+          start_column;
+          end_line;
+          end_column;
+          law_headings = [];
+        }
+      | Array t -> (
+        match j with
+        | Array l ->
+          Array.of_list
+            (List.mapi (fun i x -> decode t (path ^ "/" ^ string_of_int i) x) l)
+        | j -> fail path "expected an array, got %s" (kind j))
+      | Tuple (_, Build (Cons (_, t, Cons (_, Position, Nil)), make)) ->
+        (* A value with its position is given as the value alone *)
+        make (decode t path j) pos
+      | Tuple (_, Build (components, make)) -> (
+        match j with
+        | Array l ->
+          let n = arity components in
+          if List.length l <> n then
+            fail path "expected an array of %d elements, got %d" n
+              (List.length l);
+          let rec apply : type f. int -> (f, a) components -> f -> _ -> a =
+           fun i components f l ->
+            match components, l with
+            | Cons (_, t, components), x :: l ->
+              apply (i + 1) components
+                (f (decode t (path ^ "/" ^ string_of_int i) x))
+                l
+            | Nil, _ -> f
+            | Cons _, [] -> assert false (* the length was checked *)
+          in
+          apply 0 components make l
+        | j -> fail path "expected an array, got %s" (kind j))
+      | Tuple (_, Unbuildable) -> no_json "tuple"
+      | Struct { build = Build (components, make); _ } -> (
+        match j with
+        | Object kv ->
+          let rec labels : type f. (f, a) components -> string list = function
+            | Nil -> []
+            | Cons (label, _, components) -> label :: labels components
+          in
+          let labels = labels components in
+          List.iter
+            (fun (k, _) ->
+              if not (List.mem k labels) then fail path "unexpected field %S" k)
+            kv;
+          let rec apply : type f. (f, a) components -> f -> a =
+           fun components f ->
+            match components with
+            | Nil -> f
+            | Cons (label, t, components) ->
+              apply components (field t label (List.assoc_opt label kv) f)
+          and field : type c r.
+              c ty -> string -> ParsedJson.t option -> (c -> r) -> r =
+           fun t label j f ->
+            let path = path ^ "/" ^ label in
+            match j with
+            | None ->
+              if is_optional t then f (absent t) else fail path "missing field"
+            | Some j -> f (optional_field t path j)
+          in
+          apply components make
+        | j -> fail path "expected an object, got %s" (kind j))
+      | Struct { build = Unbuildable; name; _ } -> no_json name
+      | Enum { name; _ } when is_optional_name name -> (
+        match j with
+        | Object [] | Null | String "Absent" -> absent ty
+        | Object [("Present", x)] -> present ty (path ^ "/Present") x
+        | j -> fail path "expected an optional value, got %s" (kind j))
+      | Enum { name; cases = []; _ } -> no_json name
+      | Enum { name; cases; _ } -> (
+        let find k = List.find_opt (fun (Case (c, _, _)) -> c = k) cases in
+        match j with
+        | String k -> (
+          match find k with
+          | Some (Case (_, Unit, make)) -> make ()
+          | Some _ -> fail path "constructor %s of %s expects a content" k name
+          | None -> fail path "unknown constructor %S of %s" k name)
+        | Object [(k, x)]
+          when not (List.for_all (fun (Case (_, t, _)) -> is_unit t) cases) -> (
+          match find k with
+          | Some (Case (_, t, make)) when not (is_unit t) ->
+            make (decode t (path ^ "/" ^ k) x)
+          | Some _ -> fail path "constructor %s of %s has no content" k name
+          | None -> fail path "unknown constructor %S of %s" k name)
+        | j -> fail path "expected a constructor of %s, got %s" name (kind j))
+      | External (module E) -> E.from_json pos (ParsedJson.to_string j)
+      | Function -> no_json "function"
+      | Polymorphic -> no_json "polymorphic"
+      | Dynamic -> no_json "dynamically typed"
+    and arity : type f r. (f, r) components -> int = function
+      | Nil -> 0
+      | Cons (_, _, c) -> 1 + arity c
+    and absent : type a. a ty -> a = function
+      | Enum { cases; _ } -> (
+        match
+          List.find_map
+            (fun (Case (_, t, make)) ->
+              match t with Unit -> Some (make ()) | _ -> None)
+            cases
+        with
+        | Some v -> v
+        | None -> assert false)
+      | _ -> assert false
+    and present : type a. a ty -> string -> ParsedJson.t -> a =
+     fun ty path j ->
+      match ty with
+      | Enum { cases; _ } -> (
+        match List.find_opt (fun (Case (_, t, _)) -> not (is_unit t)) cases with
+        | Some (Case (_, t, make)) -> make (decode t path j)
+        | None -> assert false)
+      | _ -> assert false
+    (* A structure field of an optional type accepts its content as well as
+       the forms of an optional value, the first that matches *)
+    and optional_field : type a. a ty -> string -> ParsedJson.t -> a =
+     fun ty path j ->
+      if is_optional ty then
+        match present ty path j with
+        | v -> v
+        | exception (Invalid_json _ as e) -> (
+          match decode ty path j with
+          | v -> v
+          | exception Invalid_json _ -> raise e)
+      else decode ty path j
+    in
+    match ParsedJson.of_string text with
+    | exception ParsedJson.Syntax_error (offset, msg) ->
+      fail "" "%s at byte %d" msg offset
+    | j -> decode ty "" j
 end
 
 let equal = Value.equal_values
@@ -981,6 +1295,12 @@ module Optional = struct
               | `Fr -> "Présent"
               | `Pl -> "Obecny"),
               Some (Value.embed t v) ));
+        (* The JSON forms are not localised *)
+        cases =
+          [
+            Value.Case ("Absent", Value.Unit, fun () -> Absent);
+            Value.Case ("Present", t, fun v -> Present v);
+          ];
       }
 
   let of_option = function Some x -> Present x | None -> Absent
@@ -1229,9 +1549,10 @@ module BufferedJson = struct
       Printf.bprintf buf {|{%a}|} (list pfield) fields
     | V (Array t, a) ->
       Printf.bprintf buf {|[%a]|}
-        (seq (fun buf v -> runtime_value buf (t v)))
+        (seq (fun buf v -> runtime_value buf (Value.embed t v)))
         (Stdlib.Array.to_seq a)
-    | V (Tuple destr, a) ->
+    | V (Dynamic, v) -> runtime_value buf v
+    | V (Tuple (destr, _), a) ->
       Printf.bprintf buf {|[%a]|} (list runtime_value) (destr a)
     | V (Position, pos) -> code_location buf pos
     | V ((Function | Polymorphic), _) -> Buffer.add_string buf {|"<function>"|}

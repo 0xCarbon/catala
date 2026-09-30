@@ -1172,8 +1172,9 @@ let rec embed_value : type a.
   | ELit (LDate v) -> V.V (Date, v)
   | ELit (LDuration v) -> V.V (Duration, v)
   | EPos v -> V.V (Position, pos_to_runtime v)
-  | EArray el -> V.V (Array (embed_value ctx), Array.of_list el)
-  | ETuple el -> V.V (Tuple (List.map (embed_value ctx)), el)
+  | EArray el ->
+    V.V (Array Dynamic, Array.of_list (List.map (embed_value ctx) el))
+  | ETuple el -> V.V (Tuple (List.map (embed_value ctx), Unbuildable), el)
   | EStruct { name; fields } ->
     V.V
       ( Struct
@@ -1182,6 +1183,7 @@ let rec embed_value : type a.
             fields =
               List.map (fun (name, e) ->
                   StructField.original_string name, embed_value ctx e);
+            build = Unbuildable;
           },
         StructField.Map.bindings fields )
   | EInj { name; cons; e = payload }
@@ -1214,6 +1216,7 @@ let rec embed_value : type a.
                   match payload with
                   | ELit LUnit, _ -> None
                   | e -> Some (embed_value ctx e) ));
+            cases = [];
           },
         (constr_index, cons, payload) )
   | EAbs _ as lam ->

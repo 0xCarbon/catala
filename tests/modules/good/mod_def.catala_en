@@ -127,11 +127,17 @@ module Mod_def = struct
     | Something of integer
   let rtype = Value.Enum {
     name = "Mod_def";
-    constr = function
+    constr = (function
       | Yes -> 0, "Yes", None
       | No -> 1, "No", None
       | Maybe -> 2, "Maybe", None
-      | Something x -> 3, "Something", Some (Value.embed (Value.Integer) x)
+      | Something x -> 3, "Something", Some (Value.embed (Value.Integer) x));
+    cases = [
+      Value.Case ("Yes", Value.Unit, fun () -> Yes);
+      Value.Case ("No", Value.Unit, fun () -> No);
+      Value.Case ("Maybe", Value.Unit, fun () -> Maybe);
+      Value.Case ("Something", Value.Integer, fun x -> Something x);
+    ]
   }
 end
 
@@ -139,10 +145,13 @@ module Str1 = struct
   type t = { fld1: Mod_def.t; fld2: integer; }
   let rtype = Value.Struct {
     name = "Str1";
-    fields = fun t -> [
+    fields = (fun t -> [
       "fld1", Value.embed (Mod_def.rtype) t.fld1;
       "fld2", Value.embed (Value.Integer) t.fld2;
-    ]
+    ]);
+    build = Value.Build (Value.Cons ("fld1", Mod_def.rtype,
+                         Value.Cons ("fld2", Value.Integer, Value.Nil)),
+                         fun x0 x1 -> {fld1 = x0; fld2 = x1})
   }
 end
 
@@ -150,16 +159,23 @@ module S = struct
   type t = { sr: money; e1: Mod_def.t; }
   let rtype = Value.Struct {
     name = "S";
-    fields = fun t -> [
+    fields = (fun t -> [
       "sr", Value.embed (Value.Money) t.sr;
       "e1", Value.embed (Mod_def.rtype) t.e1;
-    ]
+    ]);
+    build = Value.Build (Value.Cons ("sr", Value.Money,
+                         Value.Cons ("e1", Mod_def.rtype, Value.Nil)), fun x0
+                         x1 -> {sr = x0; e1 = x1})
   }
 end
 
 module S_in = struct
   type t = unit
-  let rtype = Value.Struct { name = "S_in"; fields = fun t -> [ ] }
+  let rtype = Value.Struct {
+    name = "S_in";
+    fields = (fun t -> [ ]);
+    build = Value.Build (Value.Nil, ())
+  }
 end
 
 

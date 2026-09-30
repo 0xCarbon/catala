@@ -350,18 +350,18 @@ and generate_array_encoder (ctx : decl_ctx) typ : Val.t encoding =
   let open Val in
   conv
     (function
-      | V (Array t, elts) -> Array.map t elts
+      | V (Array t, elts) -> Array.map (embed t) elts
       | v ->
         Message.error ~internal:true
           "Unexpected runtime value %a instead of array while encoding to JSON"
           format v)
-    (fun a -> V (Array (fun v -> v), a))
+    (fun a -> V (Array Dynamic, a))
     (array (generate_encoder ctx typ))
 
 and generate_option_encoder ctx typ =
   let open Val in
   let proj_none = function
-    | V (Enum { name = "Optional" | "Optionnel"; constr }, v) -> (
+    | V (Enum { name = "Optional" | "Optionnel"; constr; _ }, v) -> (
       match constr v with _, _, None -> Some (V (Unit, ())) | _ -> None)
     | _ -> None
   in
@@ -371,10 +371,11 @@ and generate_option_encoder ctx typ =
         name = "Optional";
         constr =
           (function None -> 0, "Absent", None | Some x -> 1, "Present", Some x);
+        cases = [];
       }
   in
   let proj_null = function
-    | V (Enum { name = "Optional" | "Optionnel"; constr }, v) -> (
+    | V (Enum { name = "Optional" | "Optionnel"; constr; _ }, v) -> (
       match constr v with _, _, None -> Some () | _ -> None)
     | _ -> None
   in
@@ -401,22 +402,24 @@ and generate_tuple_encoder ctx typl =
     let bconv = merge_tups acc (tup1 (generate_encoder ctx typ)) in
     conv
       (function
-        | V (Tuple tf, elts) -> (
+        | V (Tuple (tf, _), elts) -> (
           match tf elts with
           | [x1; x2] -> x1, x2
           | arr ->
             let rarr = List.rev arr in
-            V (Tuple Fun.id, List.rev (List.tl rarr)), List.hd rarr)
+            ( V (Tuple (Fun.id, Unbuildable), List.rev (List.tl rarr)),
+              List.hd rarr ))
         | v ->
           Message.error ~internal:true
             "Unexpected runtime value %a instead of tuple while encoding to \
              JSON"
             format v)
       (function
-        | V (Tuple tf, arr), rval -> V (Tuple Fun.id, tf arr @ [rval])
+        | V (Tuple (tf, _), arr), rval ->
+          V (Tuple (Fun.id, Unbuildable), tf arr @ [rval])
         | v, rval ->
           (* First element reached *)
-          V (Tuple Fun.id, v :: [rval]))
+          V (Tuple (Fun.id, Unbuildable), v :: [rval]))
       bconv
   in
   List.fold_left (fun e typ -> add_tuple e typ) first_tup_enc (List.tl typl)
@@ -445,7 +448,11 @@ and generate_struct_encoder (ctx : decl_ctx) (sname : StructName.t) =
       (fun () ->
         V
           ( Struct
-              { name = StructName.original_base sname; fields = (fun _ -> []) },
+              {
+                name = StructName.original_base sname;
+                fields = (fun _ -> []);
+                build = Unbuildable;
+              },
             () ))
       empty
   in
@@ -467,7 +474,7 @@ and generate_struct_encoder (ctx : decl_ctx) (sname : StructName.t) =
       (function
         | V (Struct enc, data), rval ->
           V
-            ( Struct { enc with fields = Fun.id },
+            ( Struct { name = enc.name; fields = Fun.id; build = Unbuildable },
               (field_s, rval) :: enc.fields data )
         | _ -> assert false)
       bconv
@@ -477,11 +484,16 @@ and generate_struct_encoder (ctx : decl_ctx) (sname : StructName.t) =
     let all_enc =
       let wrap_present v =
         V
-          ( Enum { name = "Optional"; constr = (fun _ -> 1, "Present", Some v) },
+          ( Enum
+              {
+                name = "Optional";
+                constr = (fun _ -> 1, "Present", Some v);
+                cases = [];
+              },
             () )
       in
       let unwrap_present = function
-        | V (Enum { name = "Optional"; constr }, v) -> (
+        | V (Enum { name = "Optional"; constr; _ }, v) -> (
           match constr v with 1, "Present", Some v -> Some v | _ -> None)
         | _ -> None
       in
@@ -503,16 +515,20 @@ and generate_struct_encoder (ctx : decl_ctx) (sname : StructName.t) =
     let inj : t * t option -> t = function
       | V (Struct enc, data), None ->
         V
-          ( Struct { enc with fields = Fun.id },
+          ( Struct { name = enc.name; fields = Fun.id; build = Unbuildable },
             ( field_s,
               V
                 ( Enum
-                    { name = "Optional"; constr = (fun _ -> 0, "Absent", None) },
+                    {
+                      name = "Optional";
+                      constr = (fun _ -> 0, "Absent", None);
+                      cases = [];
+                    },
                   () ) )
             :: enc.fields data )
       | V (Struct enc, data), Some rval ->
         V
-          ( Struct { enc with fields = Fun.id },
+          ( Struct { name = enc.name; fields = Fun.id; build = Unbuildable },
             (field_s, rval) :: enc.fields data )
       | _ -> assert false
     in
@@ -531,7 +547,8 @@ and generate_enum_encoder (ctx : decl_ctx) (ename : EnumName.t) =
   let enum = EnumName.Map.find ename ctx.ctx_enums in
   let bdgs = EnumConstructor.Map.bindings enum in
   let ename_s = EnumName.original_base ename in
-  let make_constructor_case idx (cstr, typ) : Json_schema.schema * t case =
+  let make_constructor_case idx (cstr, typ) :
+      Json_schema.schema * t Json_encoding.case =
     let cstr_s = EnumConstructor.original_string cstr in
     match Mark.remove typ with
     | TLit TUnit ->
@@ -546,7 +563,9 @@ and generate_enum_encoder (ctx : decl_ctx) (ename : EnumName.t) =
                JSON"
               format v)
         (fun () ->
-          V (Enum { name = ename_s; constr = Fun.id }, (idx, cstr_s, None)))
+          V
+            ( Enum { name = ename_s; constr = Fun.id; cases = [] },
+              (idx, cstr_s, None) ))
     | _ ->
       any_case
         (obj1
@@ -554,12 +573,14 @@ and generate_enum_encoder (ctx : decl_ctx) (ename : EnumName.t) =
               (EnumConstructor.original_string cstr)
               (generate_encoder ctx typ)))
         (function
-          | V (Enum { name; constr }, rval) ->
+          | V (Enum { name; constr; _ }, rval) ->
             let _, cstr_s', v = constr rval in
             if name = ename_s && cstr_s = cstr_s' then v else None
           | _ -> None)
         (fun v ->
-          V (Enum { name = ename_s; constr = Fun.id }, (idx, cstr_s, Some v)))
+          V
+            ( Enum { name = ename_s; constr = Fun.id; cases = [] },
+              (idx, cstr_s, Some v) ))
   in
   let enc =
     if List.for_all (fun (_, typ) -> Mark.remove typ = TLit TUnit) bdgs then
@@ -574,7 +595,9 @@ and generate_enum_encoder (ctx : decl_ctx) (ename : EnumName.t) =
         (fun idx ->
           let cstr, _ = List.assoc idx bdgs_idx in
           let cstr_s = EnumConstructor.original_string cstr in
-          V (Enum { name = ename_s; constr = Fun.id }, (idx, cstr_s, None)))
+          V
+            ( Enum { name = ename_s; constr = Fun.id; cases = [] },
+              (idx, cstr_s, None) ))
         (string_enum
            (List.mapi
               (fun idx (cstr, _) ->
@@ -601,11 +624,12 @@ let scope_output_encoding scope ctx typ =
   let encoding = make_encoding ctx typ in
   def (scope_s ^ "_output") ~title ~description encoding
 
-let parse_json enc text =
+let parse_json ?pos enc text =
   let json =
     try Runtime.ParsedJson.of_string text
     with Runtime.ParsedJson.Syntax_error (offset, msg) ->
-      Message.error "@[<v 2>Failed to parse JSON:@ %s at byte %d@]" msg offset
+      Message.error ?pos "@[<v 2>Failed to parse JSON:@ %s at byte %d@]" msg
+        offset
   in
   try Exact_encoding.destruct enc json
   with e ->
@@ -613,12 +637,15 @@ let parse_json enc text =
       | Failure msg -> Format.pp_print_string fmt msg
       | e -> Format.pp_print_string fmt (Printexc.to_string e)
     in
-    Message.error
+    Message.error ?pos
       "@[<v 2>Failed to validate JSON:@ %a@]@\n\
        @\n\
        @[<v 2>Expected JSON object of the form:@ %a@]"
       (fun fmt -> Json_encoding.print_error ~print_unknown fmt)
       e Json_schema.pp (Json_encoding.schema enc)
+
+(* The mark of the unit content of a constant constructor *)
+let unit_mark mark = Expr.with_ty mark (TLit TUnit, Expr.mark_pos mark)
 
 let rec convert_to_dcalc ctx (mark : 'm mark) (typ : typ) (rval : Val.t) :
     (dcalc, 'm) boxed_gexpr =
@@ -650,23 +677,24 @@ let rec convert_to_dcalc ctx (mark : 'm mark) (typ : typ) (rval : Val.t) :
           (from_info filename start_line start_column end_line end_column)
           law_headings)
       mark
-  | TDefault typ, V (Enum { name = "Optional"; constr }, v) -> begin
+  | TDefault typ, V (Enum { name = "Optional"; constr; _ }, v) -> begin
     match constr v with
     | 0, "Absent", None -> Expr.eempty mark
     | 1, "Present", Some rval -> Expr.epuredefault (f typ rval) mark
     | _ -> assert false
   end
-  | TOption typ, V (Enum { name = "Optional"; constr }, v) -> begin
+  | TOption typ, V (Enum { name = "Optional"; constr; _ }, v) -> begin
     match constr v with
     | 0, "Absent", None ->
       Expr.einj ~name:ConstantNames.option_enum ~cons:ConstantNames.none_constr
-        ~e:(Expr.elit LUnit mark) mark
+        ~e:(Expr.elit LUnit (unit_mark mark))
+        mark
     | 1, "Present", Some rval ->
       Expr.einj ~name:ConstantNames.option_enum ~cons:ConstantNames.some_constr
         ~e:(f typ rval) mark
     | _ -> assert false
   end
-  | TEnum ename, V (Enum { name = _; constr }, v) ->
+  | TEnum ename, V (Enum { constr; _ }, v) ->
     let _idx, cstr, v = constr v in
     let cons, typ_v =
       let enum = EnumName.Map.find ename ctx.ctx_enums in
@@ -674,9 +702,13 @@ let rec convert_to_dcalc ctx (mark : 'm mark) (typ : typ) (rval : Val.t) :
       |> List.find (fun (cstr', _) ->
           EnumConstructor.original_string cstr' = cstr)
     in
-    let e = match v with None -> Expr.elit LUnit mark | Some v -> f typ_v v in
+    let e =
+      match v with
+      | None -> Expr.elit LUnit (unit_mark mark)
+      | Some v -> f typ_v v
+    in
     Expr.einj ~name:ename ~cons ~e mark
-  | TStruct sname, V (Struct { name = _; fields }, v) ->
+  | TStruct sname, V (Struct { fields; _ }, v) ->
     let fields =
       let struc = StructName.Map.find sname ctx.ctx_structs in
       let struc_fields = StructField.Map.bindings struc in
@@ -692,9 +724,11 @@ let rec convert_to_dcalc ctx (mark : 'm mark) (typ : typ) (rval : Val.t) :
         StructField.Map.empty (fields v)
     in
     Expr.estruct ~name:sname ~fields mark
-  | TArray typ, V (Array fl, a) ->
-    Expr.earray (Array.map fl a |> Array.to_list |> List.map (f typ)) mark
-  | TTuple typl, V (Tuple fl, a) ->
+  | TArray typ, V (Array t, a) ->
+    Expr.earray
+      (Array.map (embed t) a |> Array.to_list |> List.map (f typ))
+      mark
+  | TTuple typl, V (Tuple (fl, _), a) ->
     Expr.etuple (fl a |> List.map2 (fun typ -> f typ) typl) mark
   | _t, r ->
     Message.error
@@ -733,18 +767,19 @@ let rec convert_to_lcalc ctx (mark : 'm mark) (typ : typ) (rval : Val.t) :
       mark
   | TTuple [typ; (TLit TPos, _)], rval ->
     Expr.etuple [f typ rval; Expr.epos Pos.void mark] mark
-  | (TDefault typ | TOption typ), V (Enum { name = "Optional"; constr }, v) ->
-    begin
+  | (TDefault typ | TOption typ), V (Enum { name = "Optional"; constr; _ }, v)
+    -> begin
     match constr v with
     | 0, "Absent", None ->
       Expr.einj ~name:ConstantNames.option_enum ~cons:ConstantNames.none_constr
-        ~e:(Expr.elit LUnit mark) mark
+        ~e:(Expr.elit LUnit (unit_mark mark))
+        mark
     | 1, "Present", Some rval ->
       Expr.einj ~name:ConstantNames.option_enum ~cons:ConstantNames.some_constr
         ~e:(f typ rval) mark
     | _ -> assert false
   end
-  | TEnum ename, V (Enum { name = _; constr }, v) ->
+  | TEnum ename, V (Enum { constr; _ }, v) ->
     let _idx, cstr, v = constr v in
     let cons, typ_v =
       let enum = EnumName.Map.find ename ctx.ctx_enums in
@@ -752,9 +787,13 @@ let rec convert_to_lcalc ctx (mark : 'm mark) (typ : typ) (rval : Val.t) :
       |> List.find (fun (cstr', _) ->
           EnumConstructor.original_string cstr' = cstr)
     in
-    let e = match v with None -> Expr.elit LUnit mark | Some v -> f typ_v v in
+    let e =
+      match v with
+      | None -> Expr.elit LUnit (unit_mark mark)
+      | Some v -> f typ_v v
+    in
     Expr.einj ~name:ename ~cons ~e mark
-  | TStruct sname, V (Struct { name = _; fields }, v) ->
+  | TStruct sname, V (Struct { fields; _ }, v) ->
     let fields =
       let struc = StructName.Map.find sname ctx.ctx_structs in
       let struc_fields = StructField.Map.bindings struc in
@@ -770,9 +809,11 @@ let rec convert_to_lcalc ctx (mark : 'm mark) (typ : typ) (rval : Val.t) :
         StructField.Map.empty (fields v)
     in
     Expr.estruct ~name:sname ~fields mark
-  | TArray typ, V (Array fl, a) ->
-    Expr.earray (Array.map fl a |> Array.to_list |> List.map (f typ)) mark
-  | TTuple typl, V (Tuple fl, a) ->
+  | TArray typ, V (Array t, a) ->
+    Expr.earray
+      (Array.map (embed t) a |> Array.to_list |> List.map (f typ))
+      mark
+  | TTuple typl, V (Tuple (fl, _), a) ->
     Expr.etuple (fl a |> List.map2 (fun typ -> f typ) typl) mark
   | _t, r ->
     Message.error

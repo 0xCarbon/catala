@@ -1,0 +1,4 @@
+{"id": 9007199254740993, "rate": 0.1, "income": "123456789012345678901.23",
+ "resident": true, "status": {"Married": "2020-05-01"},
+ "stays": [{"arrival": "2021-01-31", "length": {"months": 1, "days": -2}}],
+ "spouse_income": 12.34, "bonus": 7}

@@ -1,0 +1,40 @@
+```catala
+declaration structure Stay:
+  data arrival content date
+  data departure content date
+
+declaration scope Bad:
+  output s content Stay
+
+scope Bad:
+  definition s equals #[json = "{\"arrival\": \"2020-01-01\"}"] Stay
+```
+
+```catala-test-cli
+$ catala test-scope Bad --disable-warnings
+┌─[ERROR]─
+│
+│  Failed to validate JSON:
+│    Missing object field departure
+│  
+│  Expected JSON object of the form:
+│    { "arrival": $date,
+│      "departure": $date }
+│    $date:
+│      /* Catala date */
+│      string
+│      /* Accepts strings with the following format: YYYY-MM-DD, e.g.,
+│         "1970-01-31" */
+│      | { /* Accepts date objects: {"year":<int>, "month":<int>,
+│             "day":<int>} */
+│          "year": integer ∈ [0, 9999.000000],
+│          "month": integer ∈ [1, 12],
+│          "day": integer ∈ [1, 31] }
+│
+├─➤ tests/json/bad/literal.catala_en:10.65-69:
+│    │
+│ 10 │   definition s equals #[json = "{/"arrival/": /"2020-01-01/"}"] Stay
+│    │                                                                 ‾‾‾‾
+└─
+#return code 123#
+```

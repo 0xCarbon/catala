@@ -295,10 +295,242 @@ let test_cmd_concat_operand () =
     (CVar.cmd_concat_operand
        [{|C:\build\a@test|}; {|C:\build\spaced dir\b@test|}])
 
+(* [Value.from_json] reads the JSON forms of scope inputs, for values of every
+   runtime type. *)
+
+module R = Catala_runtime
+module V = R.Value
+
+let pos : R.code_location =
+  {
+    filename = "test";
+    start_line = 1;
+    start_column = 1;
+    end_line = 1;
+    end_column = 2;
+    law_headings = [];
+  }
+
+type color = Red | Rgb of (R.integer * R.integer * R.integer)
+
+type person = {
+  name_id : R.integer;
+  rate : R.decimal;
+  income : R.money;
+  birth : R.date;
+  notice : R.duration;
+  resident : bool;
+  color : color;
+  scores : R.integer array;
+  spouse : R.money R.Optional.t;
+  context_value : (R.integer * R.code_location) R.Optional.t;
+  unit_field : unit;
+}
+
+let rgb_ty : (R.integer * R.integer * R.integer) V.ty =
+  V.Tuple
+    ( (fun (r, g, b) ->
+        [V.embed V.Integer r; V.embed V.Integer g; V.embed V.Integer b]),
+      V.Build
+        ( V.Cons
+            ( "0",
+              V.Integer,
+              V.Cons ("1", V.Integer, V.Cons ("2", V.Integer, V.Nil)) ),
+          fun r g b -> r, g, b ) )
+
+let color_ty : color V.ty =
+  V.Enum
+    {
+      name = "Color";
+      constr =
+        (function
+        | Red -> 0, "Red", None
+        | Rgb x -> 1, "Rgb", Some (V.embed rgb_ty x));
+      cases =
+        [
+          V.Case ("Red", V.Unit, fun () -> Red);
+          V.Case ("Rgb", rgb_ty, fun x -> Rgb x);
+        ];
+    }
+
+let with_pos_ty : (R.integer * R.code_location) V.ty =
+  V.Tuple
+    ( (fun (x, p) -> [V.embed V.Integer x; V.embed V.Position p]),
+      V.Build
+        ( V.Cons ("0", V.Integer, V.Cons ("1", V.Position, V.Nil)),
+          fun x p -> x, p ) )
+
+(* Labels are JSON keys: [name_id] is read from "name", as the field of a scope
+   input structure without its [_in] suffix *)
+let person_ty : person V.ty =
+  V.Struct
+    {
+      name = "Person";
+      fields = (fun _ -> []);
+      build =
+        V.Build
+          ( V.Cons
+              ( "name",
+                V.Integer,
+                V.Cons
+                  ( "rate",
+                    V.Decimal,
+                    V.Cons
+                      ( "income",
+                        V.Money,
+                        V.Cons
+                          ( "birth",
+                            V.Date,
+                            V.Cons
+                              ( "notice",
+                                V.Duration,
+                                V.Cons
+                                  ( "resident",
+                                    V.Bool,
+                                    V.Cons
+                                      ( "color",
+                                        color_ty,
+                                        V.Cons
+                                          ( "scores",
+                                            V.Array V.Integer,
+                                            V.Cons
+                                              ( "spouse",
+                                                R.Optional.rtype V.Money,
+                                                V.Cons
+                                                  ( "context_value",
+                                                    R.Optional.rtype with_pos_ty,
+                                                    V.Cons
+                                                      ( "unit_field",
+                                                        V.Unit,
+                                                        V.Nil ) ) ) ) ) ) ) ) )
+                  ) ),
+            fun name_id
+              rate
+              income
+              birth
+              notice
+              resident
+              color
+              scores
+              spouse
+              context_value
+              unit_field
+            ->
+              {
+                name_id;
+                rate;
+                income;
+                birth;
+                notice;
+                resident;
+                color;
+                scores;
+                spouse;
+                context_value;
+                unit_field;
+              } );
+    }
+
+let from_json ty text = V.from_json ty pos text
+let z = Z.of_string
+let q = Q.of_string
+
+let invalid ty text =
+  match from_json ty text with
+  | _ -> Alcotest.failf "accepted invalid JSON %s" text
+  | exception V.Invalid_json (_, msg) -> msg
+
+let test_from_json_struct () =
+  let p =
+    from_json person_ty
+      {|{"name": 123456789012345678901234567890, "rate": 0.1, "income": 12.34,
+         "birth": {"year": 2000, "month": 2, "day": 29}, "notice": {"days": -3},
+         "resident": true, "color": {"Rgb": [1, "2", 3e0]}, "scores": [1, 2],
+         "spouse": 5, "unit_field": {}}|}
+  in
+  Alcotest.(check string)
+    "integer beyond 63 bits" "123456789012345678901234567890"
+    (Z.to_string p.name_id);
+  Alcotest.(check bool) "exact decimal" true (Q.equal p.rate (q "1/10"));
+  Alcotest.(check string) "exact money" "1234" (Z.to_string p.income);
+  Alcotest.(check string) "date object" "2000-02-29" (R.date_to_string p.birth);
+  Alcotest.(check (list int))
+    "duration defaults" [0; 0; -3]
+    (let y, m, d = R.duration_to_years_months_days p.notice in
+     [y; m; d]);
+  Alcotest.(check bool)
+    "enum payload" true
+    (match p.color with
+    | Rgb (r, g, b) -> Z.equal r Z.one && Z.equal g (z "2") && Z.equal b (z "3")
+    | Red -> false);
+  Alcotest.(check int) "array" 2 (Array.length p.scores);
+  Alcotest.(check bool) "boolean and unit" true (p.resident && p.unit_field = ());
+  Alcotest.(check bool)
+    "optional field given its content" true
+    (p.spouse = R.Optional.Present (z "500"));
+  Alcotest.(check bool)
+    "omitted optional field" true
+    (p.context_value = R.Optional.Absent)
+
+let test_from_json_optional () =
+  let opt = R.Optional.rtype V.Money in
+  List.iter
+    (fun text ->
+      Alcotest.(check bool) text true (from_json opt text = R.Optional.Absent))
+    [{|null|}; {|{}|}; {|"Absent"|}];
+  Alcotest.(check bool)
+    "Present" true
+    (from_json opt {|{"Present": "1.5"}|} = R.Optional.Present (z "150"));
+  let ctx = R.Optional.rtype with_pos_ty in
+  Alcotest.(check bool)
+    "value with its position" true
+    (match from_json ctx {|{"Present": 7}|} with
+    | R.Optional.Present (x, p) -> Z.equal x (z "7") && p = pos
+    | Absent -> false)
+
+let test_from_json_errors () =
+  let check_error what expected ty text =
+    Alcotest.(check string) what expected (invalid ty text)
+  in
+  check_error "unknown field" {|unexpected field "extra"|} person_ty
+    {|{"extra": 1}|};
+  check_error "missing field" "at /birth, missing field" person_ty
+    {|{"name": 1, "rate": 0, "income": 0, "notice": {}, "resident": true,
+       "color": "Red", "scores": [], "unit_field": {}}|};
+  check_error "non-integral integer" "expected an integer, got the number 1.5"
+    V.Integer "1.5";
+  check_error "integer string" {|expected an integer, got the string "0x1F"|}
+    V.Integer {|"0x1F"|};
+  check_error "zero denominator" {|expected a decimal, got the string "1/0"|}
+    V.Decimal {|"1/0"|};
+  check_error "money fraction" {|expected money, got the string "1/3"|} V.Money
+    {|"1/3"|};
+  check_error "unknown constructor" {|unknown constructor "Blue" of Color|}
+    color_ty {|"Blue"|};
+  check_error "tuple arity" "at /Rgb, expected an array of 3 elements, got 2"
+    color_ty {|{"Rgb": [1, 2]}|};
+  check_error "date range" "at /month, expected an integer in [1, 12], got 13"
+    V.Date {|{"year": 2000, "month": 13, "day": 1}|};
+  check_error "duplicate key" {|duplicate key "a" at byte 9|}
+    (R.Optional.rtype V.Unit) {|{"a": 1, "a": 2}|};
+  check_error "strict syntax" "unexpected character at byte 6"
+    (V.Array V.Integer) {|[1, 2,]|};
+  Alcotest.check_raises "no JSON form for dynamic values"
+    (Invalid_argument
+       "Value.from_json: dynamically typed values cannot be read from JSON")
+    (fun () -> ignore (from_json (V.Array V.Dynamic) "[1]"))
+
 let () =
   let open Alcotest in
   run "Unit tests"
     [
+      ( "Runtime value decoding from JSON",
+        [
+          test_case "structures and every field type" `Quick
+            test_from_json_struct;
+          test_case "optional values" `Quick test_from_json_optional;
+          test_case "errors" `Quick test_from_json_errors;
+        ] );
       ( "Iota-reduction",
         [
           test_case "#1" `Quick Shared_ast.Optimizations.test_iota_reduction_1;

@@ -1,0 +1,28 @@
+; explain --inline-mod-uses on English and French files, with the main file
+; given relative to the current directory. The files are copied outside the
+; source tree, where catala finds its plugins in the installed layout
+; (_build/install/default).
+
+(rule
+ (alias runtest)
+ (deps
+  run.sh
+  explain_rate.catala_en
+  inline_en.catala_en
+  explication_taux.catala_fr
+  inline_fr.catala_fr
+  (package catala))
+ (action
+  (run sh run.sh inline_en.catala_en "<b>rate</b>")))
+
+(rule
+ (alias runtest)
+ (deps
+  run.sh
+  explain_rate.catala_en
+  inline_en.catala_en
+  explication_taux.catala_fr
+  inline_fr.catala_fr
+  (package catala))
+ (action
+  (run sh run.sh inline_fr.catala_fr "<b>taux</b>")))

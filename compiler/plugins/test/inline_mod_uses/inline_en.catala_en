@@ -1,0 +1,19 @@
+# Inlining a used module in explain
+
+> Using Explain_rate
+
+```catala
+declaration scope Compute:
+  input x content decimal
+  output y content decimal
+
+scope Compute:
+  definition y equals x * Explain_rate.rate
+
+#[test]
+declaration scope Test:
+  output result content Compute
+
+scope Test:
+  definition result equals output of Compute with { -- x: 2.0 }
+```

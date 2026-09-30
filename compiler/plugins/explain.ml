@@ -1774,15 +1774,28 @@ let inline_used_modules global_options =
         | FileName f -> Filename.dirname f
         | _ -> Sys.getcwd ()
       in
-      let en_candidate = String.uncapitalize_ascii mod_name ^ ".catala_en" in
-      let fr_candidate = String.uncapitalize_ascii mod_name ^ ".catala_fr" in
+      let candidates =
+        List.concat_map
+          (fun (code, _) ->
+            let base = String.uncapitalize_ascii mod_name ^ ".catala_" ^ code in
+            [base; base ^ ".md"])
+          Cli.languages
+      in
       Sys.readdir dir
-      |> Array.map (Filename.concat dir)
+      (* [File.( / )] builds the path the way the parser resolves the
+         [Include] directive, which the included file resolver is keyed on *)
+      |> Array.map (fun f -> File.(dir / f))
       |> Array.find_map (fun path ->
-          let file = Filename.basename path in
-          if file = en_candidate then Some path
-          else if file = fr_candidate then Some path
+          if List.mem (Filename.basename path) candidates then Some path
           else None)
+    in
+    (* The directive keywords of each surface language, as the MR_MODULE_DEF,
+       MR_MODULE_USE and MR_LAW_INCLUDE rules of the lexers match them *)
+    let directives file =
+      let open Re in
+      match Cli.file_lang file with
+      | `En | `Pl -> str "Module", str "Using", "Include"
+      | `Fr -> str "Module", seq [str "Usage"; rep blank; str "de"], "Inclusion"
     in
     let raw_prg, file =
       match global_options.input_src with
@@ -1792,10 +1805,7 @@ let inline_used_modules global_options =
       | Contents (s, fname) -> s, fname
       | Stdin _ -> Message.error "Cannot inline module usage from stdin"
     in
-    let raw_prg =
-      (* let's assume it's in english *)
-      String.split_on_char '\n' raw_prg
-    in
+    let raw_prg = String.split_on_char '\n' raw_prg in
     let contents =
       List.fold_left
         (fun raw_prg (used_module, used_module_alias) ->
@@ -1808,11 +1818,14 @@ let inline_used_modules global_options =
               used_module
           | Some mod_file ->
             let new_content =
+              let module_def, _, _ = directives mod_file in
               let s =
                 Re.(
-                  replace_string
-                    (compile (str "> Module"))
-                    ~by:"< Module" (File.contents mod_file))
+                  replace
+                    (compile
+                       (seq [char '>'; group (seq [rep blank; module_def])]))
+                    ~f:(fun g -> "<" ^ Group.get g 1)
+                    (File.contents mod_file))
               in
               Global.Contents (s, mod_file)
             in
@@ -1821,11 +1834,22 @@ let inline_used_modules global_options =
             List.map
               (fun s ->
                 let open Re in
+                let _, module_use, law_include = directives file in
                 let using_mod_re =
-                  compile (str (Format.sprintf "> Using %s" used_module))
+                  compile
+                    (seq
+                       [
+                         char '>';
+                         rep blank;
+                         module_use;
+                         rep1 blank;
+                         str used_module;
+                         eow;
+                       ])
                 in
                 if matches using_mod_re s <> [] then
-                  Format.sprintf "> Include: %s" (Filename.basename mod_file)
+                  Format.sprintf "> %s: %s" law_include
+                    (Filename.basename mod_file)
                 else
                   replace_string
                     (compile (str (used_module_alias ^ ".")))

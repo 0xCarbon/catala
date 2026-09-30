@@ -1,0 +1,5 @@
+> Module Explain_rate
+
+```catala-metadata
+declaration rate content decimal equals 0.5
+```

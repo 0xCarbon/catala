@@ -1,0 +1,19 @@
+# Inclusion d'un module utilisé dans explain
+
+> Usage de Explication_taux
+
+```catala
+déclaration champ d'application Calcul:
+  entrée x contenu décimal
+  résultat y contenu décimal
+
+champ d'application Calcul:
+  définition y égal à x * Explication_taux.taux
+
+#[test]
+déclaration champ d'application Test:
+  résultat r contenu Calcul
+
+champ d'application Test:
+  définition r égal à résultat de Calcul avec { -- x: 2,0 }
+```

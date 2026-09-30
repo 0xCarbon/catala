@@ -72,6 +72,11 @@ in behavior visible for the end-users of the tooling.
   is lexed as its first word followed by that identifier (`x and then_y`,
   `x ou bien_y` were syntax errors).
 
+* Fix `explain --inline-mod-uses`: used modules are found with the file
+  extensions of every surface language and the directives of the file's
+  language (`Usage de`, `Inclusion` in French), and inlining works when the
+  main file is given as a relative path in the current directory.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

@@ -214,8 +214,11 @@ class Date:
         return self.year, self.month, self.day
 
     def __str__(self):
-        """Respects ISO8601 format."""
-        return f"{self.year:04}-{self.month:02}-{self.day:02}"
+        """YYYY-MM-DD (ISO 8601) for the years 0 to 9999; beyond them the year
+        has more digits, and a negative year has a minus sign followed by at
+        least four digits: -0738-02-03, 2737909006-12-28."""
+        sign = "-" if self.year < 0 else ""
+        return f"{sign}{abs(self.year):04}-{self.month:02}-{self.day:02}"
 
     def __repr__(self):
         return '<{} object at {}: {}>'.format(
@@ -225,7 +228,8 @@ class Date:
 
     @classmethod
     def from_string(self, s : str) -> Date:
-        rege = re.compile("([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])")
+        # Exactly the form __str__ writes
+        rege = re.compile("(?!-0000-)(-?(?:[0-9]{4}|[1-9][0-9]{4,}))-([0-9][0-9])-([0-9][0-9])")
         match = rege.fullmatch(s)
         if match is None:
             raise InvalidDate()

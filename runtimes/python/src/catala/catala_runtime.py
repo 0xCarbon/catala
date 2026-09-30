@@ -680,7 +680,7 @@ class Date(Value):
         return f"Date({self.value.__repr__()})"
 
     def to_json(self) -> str:
-        return f'"{self.value.year:04d}-{self.value.month:02d}-{self.value.day:02d}"'
+        return f'"{self.value}"'
 
 
 class Duration(Value):

@@ -1,0 +1,20 @@
+# Dates in the JSON output of every backend
+
+```catala
+#[test]
+declaration scope S:
+  output future content date
+  output past content date
+  output year_zero content date
+  output year_minus_one content date
+  output year_10000 content date
+  output usual content date
+
+scope S:
+  definition future equals |2000-01-01| + 100000000 day
+  definition past equals |2000-01-01| - 1000000 day
+  definition year_zero equals |2000-01-01| - 2000 year
+  definition year_minus_one equals |2000-01-01| - 2001 year
+  definition year_10000 equals |2000-01-01| + 8000 year
+  definition usual equals |2024-02-29|
+```

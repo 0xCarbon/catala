@@ -857,7 +857,14 @@ void catala_tojson (struct catala_buf buf, const catala_value x) {
     return;
   }
   case DATE:
-    buf.printf("\"%04d-%02d-%02d\"", dc_date_year(x.v), dc_date_month(x.v), dc_date_day(x.v));
+  {
+    /* As dc_print_date: at least four year digits, a minus sign before 0 */
+    long year = dc_date_year(x.v);
+    unsigned long abs_year =
+      year < 0 ? 0UL - (unsigned long)year : (unsigned long)year;
+    buf.printf("\"%s%04lu-%02lu-%02lu\"", year < 0 ? "-" : "", abs_year,
+               dc_date_month(x.v), dc_date_day(x.v));
+  }
     return;
   case DURATION:
     /* Exact integer strings, like integers */

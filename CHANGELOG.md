@@ -89,6 +89,15 @@ in behavior visible for the end-users of the tooling.
   zero and negative components (`-2 day` was `{}`). A component beyond the
   backend's machine integers raises `IntegerOverflow`.
 
+* Fix dates in JSON: every date a program computes is written as a string
+  that reads back as the same date, in every runtime: `YYYY-MM-DD` for the
+  years 0 to 9999, more year digits beyond them, and a minus sign before at
+  least four digits before year 0 (`-0738-02-03`, `2737909006-12-28`; the
+  years were written as `-738` and read with at most four characters, and the
+  C runtime printed its `long` years with `%d`). The JSON schema gives the
+  pattern of date strings, date objects take any year, and a year beyond the
+  backend's machine integers raises `IntegerOverflow`.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

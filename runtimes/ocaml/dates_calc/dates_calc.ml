@@ -234,15 +234,54 @@ let compare_dates (d1 : date) (d2 : date) : int =
     else Int.compare d1.month d2.month
   else Int.compare d1.year d2.year
 
+(* The year: at least four digits, zero-padded, after a minus sign if it is
+   negative (ISO 8601 within years 0 to 9999, and beyond them) *)
+
 (** Respects ISO8601 format. *)
 let format_date (fmt : Format.formatter) (d : date) : unit =
-  Format.fprintf fmt "%04d-%02d-%02d" d.year d.month d.day
+  let y = string_of_int d.year in
+  let sign, digits =
+    if y.[0] = '-' then "-", String.sub y 1 (String.length y - 1) else "", y
+  in
+  let pad = String.make (max 0 (4 - String.length digits)) '0' in
+  Format.fprintf fmt "%s%s%s-%02d-%02d" sign pad digits d.month d.day
 
 let date_of_string str =
-  try
-    Scanf.sscanf str "%04d-%02d-%02d" (fun year month day ->
-        make_date ~year ~month ~day)
-  with Scanf.Scan_failure _ -> invalid_arg "date_of_string"
+  let invalid () = invalid_arg "date_of_string" in
+  let n = String.length str in
+  let is_digit c = c >= '0' && c <= '9' in
+  let digits i len =
+    if i + len > n then invalid ();
+    for k = i to i + len - 1 do
+      if not (is_digit str.[k]) then invalid ()
+    done;
+    int_of_string (String.sub str i len)
+  in
+  let negative = n > 0 && str.[0] = '-' in
+  let y0 = if negative then 1 else 0 in
+  let y1 =
+    match String.index_from_opt str y0 '-' with
+    | Some j -> j
+    | None -> invalid ()
+  in
+  let year_digits = String.sub str y0 (y1 - y0) in
+  let len = String.length year_digits in
+  (* The canonical form only, as [format_date] writes it *)
+  if
+    len < 4
+    || (len > 4 && year_digits.[0] = '0')
+    || (negative && year_digits = "0000")
+    || (not (String.for_all is_digit year_digits))
+    || n <> y1 + 6
+    || str.[y1 + 3] <> '-'
+  then invalid ();
+  let month = digits (y1 + 1) 2 and day = digits (y1 + 4) 2 in
+  let year =
+    match int_of_string_opt ((if negative then "-" else "") ^ year_digits) with
+    | Some y -> y
+    | None -> raise Overflow
+  in
+  make_date ~year ~month ~day
 
 let first_day_of_month (d : date) : date =
   assert (is_valid_date d);

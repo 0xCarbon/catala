@@ -289,18 +289,40 @@ int dc_compare_dates (const dc_date *d1, const dc_date *d2) {
   return 0;
 }
 
-/* Respects ISO8601 format. */
+/* YYYY-MM-DD (ISO 8601) for the years 0 to 9999; beyond them the year has more
+   digits, and a negative year has a minus sign followed by at least four
+   digits: -0738-02-03, 2737909006-12-28 */
 void dc_print_date (const dc_date *d) {
-  printf("%04ld-%02lu-%02lu", d->year, d->month, d->day);
+  unsigned long abs_year =
+    d->year < 0 ? 0UL - (unsigned long)d->year : (unsigned long)d->year;
+  printf("%s%04lu-%02lu-%02lu", d->year < 0 ? "-" : "", abs_year, d->month,
+         d->day);
 }
 
+/* Reads exactly the form dc_print_date writes */
 dc_success dc_date_of_string (dc_date *ret, const char* s) {
-  if (sscanf(s, "%4ld-%2lu-%2lu",
-             &ret->year, &ret->month, &ret->day)
-      == 3)
-    return dc_ok;
-  else
+  int negative = (s[0] == '-');
+  const char *y = s + negative, *p = y;
+  unsigned long abs_year = 0;
+  size_t len;
+  while (*p >= '0' && *p <= '9') {
+    if (abs_year > (ULONG_MAX - 9) / 10) return dc_overflow;
+    abs_year = abs_year * 10 + (unsigned long)(*p - '0');
+    p++;
+  }
+  len = (size_t)(p - y);
+  if (len < 4 || (len > 4 && y[0] == '0') || (negative && abs_year == 0))
     return dc_error;
+  if (!(p[0] == '-' && p[1] >= '0' && p[1] <= '9' && p[2] >= '0' && p[2] <= '9'
+        && p[3] == '-' && p[4] >= '0' && p[4] <= '9' && p[5] >= '0'
+        && p[5] <= '9' && p[6] == '\0'))
+    return dc_error;
+  if (abs_year > (negative ? (unsigned long)LONG_MAX + 1UL : (unsigned long)LONG_MAX))
+    return dc_overflow;
+  ret->year = negative ? -(long)(abs_year - 1) - 1 : (long)abs_year;
+  ret->month = (unsigned long)((p[1] - '0') * 10 + (p[2] - '0'));
+  ret->day = (unsigned long)((p[4] - '0') * 10 + (p[5] - '0'));
+  return dc_is_valid_date(ret) ? dc_ok : dc_error;
 }
 
 void dc_first_day_of_month (dc_date *ret, const dc_date *d) {

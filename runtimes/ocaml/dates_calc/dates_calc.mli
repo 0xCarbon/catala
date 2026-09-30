@@ -49,9 +49,17 @@ val compare_dates : date -> date -> int
 val date_to_ymd : date -> int * int * int
 
 val format_date : Format.formatter -> date -> unit
-(** Respects ISO8601 format. *)
+(** [YYYY-MM-DD] (ISO 8601) for the years 0 to 9999; beyond them, the year has
+    more digits, and a negative year has a minus sign followed by at least four
+    digits ([-0738-02-03], [2737909006-12-28]). *)
 
 val date_of_string : string -> date
+(** Reads exactly the form [format_date] writes: every date it writes reads back
+    identically.
+    @raise [Invalid_argument] on any other text
+    @raise [InvalidDate] on a text that is not a date of the calendar
+    @raise [Overflow] on a year that does not fit a machine integer *)
+
 val first_day_of_month : date -> date
 val last_day_of_month : date -> date
 val is_leap_year : int -> bool

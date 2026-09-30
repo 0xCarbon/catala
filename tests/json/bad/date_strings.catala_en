@@ -1,0 +1,149 @@
+# Date strings that are not the form Catala writes
+
+```catala
+declaration scope Echo:
+  input d content date
+  output same content date
+
+scope Echo:
+  definition same equals d
+```
+
+A year has at least four digits:
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":"738-02-03"}
+┌─[ERROR]─
+│
+│  Failed to validate JSON:
+│    At /d, no case matched:
+│      invalid date "738-02-03"
+│      Unexpected string instead of object
+│  
+│  Expected JSON object of the form:
+│    { "d": $date }
+│    $date:
+│      /* Catala date */
+│      /^(?!-0000-)-?([0-9]{4}|[1-9][0-9]{4,})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/
+│      /* Accepts strings with the following format: YYYY-MM-DD, e.g.,
+│         "1970-01-31", the year having more digits beyond 9999 and a minus
+│         sign before 0 ("-0738-02-03") */
+│      | { /* Accepts date objects: {"year":<int>, "month":<int>,
+│             "day":<int>} */
+│          "year": $integer,
+│          "month": integer ∈ [1, 12],
+│          "day": integer ∈ [1, 31] }
+│    $integer:
+│      /* Catala Integer */
+│      integer | /^-?[0-9]+$/
+│
+└─
+#return code 123#
+```
+
+and no leading zero beyond them, nor a sign before year 0:
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":"02000-01-01"}
+┌─[ERROR]─
+│
+│  Failed to validate JSON:
+│    At /d, no case matched:
+│      invalid date "02000-01-01"
+│      Unexpected string instead of object
+│  
+│  Expected JSON object of the form:
+│    { "d": $date }
+│    $date:
+│      /* Catala date */
+│      /^(?!-0000-)-?([0-9]{4}|[1-9][0-9]{4,})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/
+│      /* Accepts strings with the following format: YYYY-MM-DD, e.g.,
+│         "1970-01-31", the year having more digits beyond 9999 and a minus
+│         sign before 0 ("-0738-02-03") */
+│      | { /* Accepts date objects: {"year":<int>, "month":<int>,
+│             "day":<int>} */
+│          "year": $integer,
+│          "month": integer ∈ [1, 12],
+│          "day": integer ∈ [1, 31] }
+│    $integer:
+│      /* Catala Integer */
+│      integer | /^-?[0-9]+$/
+│
+└─
+#return code 123#
+```
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":"-0000-01-01"}
+┌─[ERROR]─
+│
+│  Failed to validate JSON:
+│    At /d, no case matched:
+│      invalid date "-0000-01-01"
+│      Unexpected string instead of object
+│  
+│  Expected JSON object of the form:
+│    { "d": $date }
+│    $date:
+│      /* Catala date */
+│      /^(?!-0000-)-?([0-9]{4}|[1-9][0-9]{4,})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/
+│      /* Accepts strings with the following format: YYYY-MM-DD, e.g.,
+│         "1970-01-31", the year having more digits beyond 9999 and a minus
+│         sign before 0 ("-0738-02-03") */
+│      | { /* Accepts date objects: {"year":<int>, "month":<int>,
+│             "day":<int>} */
+│          "year": $integer,
+│          "month": integer ∈ [1, 12],
+│          "day": integer ∈ [1, 31] }
+│    $integer:
+│      /* Catala Integer */
+│      integer | /^-?[0-9]+$/
+│
+└─
+#return code 123#
+```
+
+A date of the calendar:
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":"2023-02-29"}
+┌─[ERROR]─
+│
+│  Failed to validate JSON:
+│    At /d, no case matched:
+│      invalid date "2023-02-29"
+│      Unexpected string instead of object
+│  
+│  Expected JSON object of the form:
+│    { "d": $date }
+│    $date:
+│      /* Catala date */
+│      /^(?!-0000-)-?([0-9]{4}|[1-9][0-9]{4,})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/
+│      /* Accepts strings with the following format: YYYY-MM-DD, e.g.,
+│         "1970-01-31", the year having more digits beyond 9999 and a minus
+│         sign before 0 ("-0738-02-03") */
+│      | { /* Accepts date objects: {"year":<int>, "month":<int>,
+│             "day":<int>} */
+│          "year": $integer,
+│          "month": integer ∈ [1, 12],
+│          "day": integer ∈ [1, 31] }
+│    $integer:
+│      /* Catala Integer */
+│      integer | /^-?[0-9]+$/
+│
+└─
+#return code 123#
+```
+
+A year beyond machine integers is an integer too large for the computation:
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":"99999999999999999999-01-01"}
+┌─[ERROR]─
+│
+│  During evaluation: an integer is too large for this computation.
+│  Reading the JSON value at /d.
+│
+└─
+#return code 123#
+```

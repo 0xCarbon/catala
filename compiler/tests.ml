@@ -545,6 +545,69 @@ let test_from_json_duration () =
     "at /days, expected an integer, got the number 1.5"
     (invalid V.Duration {|{"days": 1.5}|})
 
+(* Every date the runtime can hold is written as a string that reads back as
+   the same date *)
+let test_date_strings () =
+  let module D = Dates_calc in
+  let base = D.make_date ~year:2000 ~month:1 ~day:1 in
+  let offsets =
+    let st = Random.State.make [| 20260930 |] in
+    [0; 1; -1; 1_000_000; -1_000_000; 1_000_000_000_000; -1_000_000_000_000]
+    @ List.init 20_000 (fun _ ->
+        Random.State.full_int st 2_000_000_000_001 - 1_000_000_000_000)
+  in
+  let edges =
+    List.map
+      (fun year -> D.make_date ~year ~month:12 ~day:31)
+      [0; -1; 9999; 10000; -9999; -10000; max_int; min_int]
+  in
+  List.iter
+    (fun d ->
+      let s = R.date_to_string d in
+      if D.compare_dates (D.date_of_string s) d <> 0 then
+        Alcotest.failf "%s does not read back as the same date" s)
+    (edges
+    @ List.map
+        (fun n -> D.add_dates base (D.make_period ~years:0 ~months:0 ~days:n))
+        offsets);
+  Alcotest.(check (list string))
+    "canonical forms"
+    ["-0738-02-03"; "0000-01-01"; "2737909006-12-28"]
+    (List.map R.date_to_string
+       [
+         D.make_date ~year:(-738) ~month:2 ~day:3;
+         D.make_date ~year:0 ~month:1 ~day:1;
+         D.make_date ~year:2737909006 ~month:12 ~day:28;
+       ]);
+  List.iter
+    (fun s ->
+      match D.date_of_string s with
+      | _ -> Alcotest.failf "accepted %S" s
+      | exception (Invalid_argument _ | D.InvalidDate) -> ())
+    [
+      "738-02-03";
+      "02000-01-01";
+      "-0000-01-01";
+      "2000-1-01";
+      "2000-01-011";
+      " 2000-01-01";
+      "+2000-01-01";
+      "2000-13-01";
+      "2023-02-29";
+      "";
+    ];
+  Alcotest.check_raises "a year beyond a machine integer" D.Overflow (fun () ->
+      ignore (D.date_of_string "99999999999999999999-01-01"));
+  Alcotest.(check string)
+    "a date object with any year" "-0738-02-03"
+    (R.date_to_string
+       (from_json V.Date {|{"year": "-738", "month": 2, "day": 3}|}));
+  Alcotest.(check bool)
+    "a year beyond a machine integer is IntegerOverflow" true
+    (match from_json V.Date {|"99999999999999999999-01-01"|} with
+    | _ -> false
+    | exception R.Error (R.IntegerOverflow, _, _) -> true)
+
 (* Durations have machine-integer components: arithmetic on them raises
    IntegerOverflow instead of wrapping *)
 
@@ -609,6 +672,7 @@ let () =
           test_case "optional values" `Quick test_from_json_optional;
           test_case "errors" `Quick test_from_json_errors;
           test_case "durations" `Quick test_from_json_duration;
+          test_case "dates round-trip as strings" `Quick test_date_strings;
         ] );
       ( "Duration arithmetic overflow",
         [

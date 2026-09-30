@@ -1078,16 +1078,23 @@ module Value = struct
       | Date -> (
         match j with
         | String s -> (
-          try Dates_calc.date_of_string s
-          with
-          | Invalid_argument _ | Failure _ | End_of_file
-          | Dates_calc.InvalidDate
-          ->
-            fail path "invalid date %S" s)
+          try Dates_calc.date_of_string s with
+          | Invalid_argument _ | Dates_calc.InvalidDate ->
+            fail path "invalid date %S" s
+          | Dates_calc.Overflow -> raise (Error (IntegerOverflow, [pos], None)))
         | Object _ -> (
           let get = fields path ["year"; "month"; "day"] j in
           let comp k lo hi = int_in (path ^ "/" ^ k) lo hi (req path get k) in
-          let year = comp "year" 0 9999 in
+          (* Any year a date can hold, like the string form *)
+          let year =
+            let z =
+              numeric (path ^ "/year") "an integer" (req path get "year")
+                ~of_number:ParsedJson.integer_of_number
+                ~of_string:ParsedJson.integer_of_string
+            in
+            if Z.fits_int z then Z.to_int z
+            else raise (Error (IntegerOverflow, [pos], None))
+          in
           let month = comp "month" 1 12 in
           let day = comp "day" 1 31 in
           try Dates_calc.make_date ~year ~month ~day

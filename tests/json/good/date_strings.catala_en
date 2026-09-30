@@ -1,0 +1,162 @@
+# Dates in JSON beyond the years 0 to 9999
+
+Every date the runtime computes is written in JSON as a string that reads back
+as the same date: `YYYY-MM-DD` for the years 0 to 9999, more year digits
+beyond, and a minus sign before at least four year digits before year 0.
+
+```catala
+declaration scope Far:
+  output future content date
+  output past content date
+  output year_zero content date
+  output year_minus_one content date
+  output year_10000 content date
+
+scope Far:
+  definition future equals |2000-01-01| + 1000000000000 day
+  definition past equals |2000-01-01| - 1000000 day
+  definition year_zero equals |2000-01-01| - 2000 year
+  definition year_minus_one equals |2000-01-01| - 2001 year
+  definition year_10000 equals |2000-01-01| + 8000 year
+
+declaration scope Echo:
+  input d content date
+  output same content date
+  output next content date
+
+scope Echo:
+  definition same equals d
+  definition next equals d + 1 day
+```
+
+```catala-test-cli
+$ catala test-scope Far -F json
+{"future":"2737909006-12-28","past":"-0738-02-03","year_zero":"0000-01-01","year_minus_one":"-0001-01-01","year_10000":"10000-01-01"}
+```
+
+Each of them reads back identically:
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":"2737909006-12-28"} -F json
+{"same":"2737909006-12-28","next":"2737909006-12-29"}
+```
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":"-0738-02-03"} -F json
+{"same":"-0738-02-03","next":"-0738-02-04"}
+```
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":"0000-01-01"} -F json
+{"same":"0000-01-01","next":"0000-01-02"}
+```
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":"-0001-01-01"} -F json
+{"same":"-0001-01-01","next":"-0001-01-02"}
+```
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":"10000-01-01"} -F json
+{"same":"10000-01-01","next":"10000-01-02"}
+```
+
+The year of a date object is an integer too:
+
+```catala-test-cli
+$ catala test-scope Echo --input {"d":{"year":"-738","month":2,"day":3}} -F json
+{"same":"-0738-02-03","next":"-0738-02-04"}
+```
+
+```catala-test-cli
+$ catala json-schema --scope Echo
+[
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Scope Echo input",
+    "description": "Input structure of scope Echo",
+    "$ref": "#/definitions/Echo_in",
+    "definitions": {
+      "Echo_in": {
+        "type": "object",
+        "properties": { "d": { "$ref": "#/definitions/date" } },
+        "required": [ "d" ],
+        "additionalProperties": false
+      },
+      "date": {
+        "title": "Catala date",
+        "anyOf": [
+          {
+            "description": "Accepts strings with the following format: YYYY-MM-DD, e.g., /"1970-01-31/", the year having more digits beyond 9999 and a minus sign before 0 (/"-0738-02-03/")",
+            "type": "string",
+            "pattern": "^(?!-0000-)-?([0-9]{4}|[1-9][0-9]{4,})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+          },
+          {
+            "description": "Accepts date objects: {/"year/":<int>, /"month/":<int>, /"day/":<int>}",
+            "type": "object",
+            "properties": {
+              "year": { "$ref": "#/definitions/integer" },
+              "month": { "type": "integer", "minimum": 1.0, "maximum": 12.0 },
+              "day": { "type": "integer", "minimum": 1.0, "maximum": 31.0 }
+            },
+            "required": [ "day", "month", "year" ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "integer": {
+        "title": "Catala Integer",
+        "anyOf": [
+          { "type": "integer" },
+          { "type": "string", "pattern": "^-?[0-9]+$" }
+        ]
+      }
+    }
+  },
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Scope Echo output",
+    "description": "Output structure of scope Echo",
+    "$ref": "#/definitions/Echo",
+    "definitions": {
+      "Echo": {
+        "type": "object",
+        "properties": {
+          "same": { "$ref": "#/definitions/date" },
+          "next": { "$ref": "#/definitions/date" }
+        },
+        "required": [ "next", "same" ],
+        "additionalProperties": false
+      },
+      "date": {
+        "title": "Catala date",
+        "anyOf": [
+          {
+            "description": "Accepts strings with the following format: YYYY-MM-DD, e.g., /"1970-01-31/", the year having more digits beyond 9999 and a minus sign before 0 (/"-0738-02-03/")",
+            "type": "string",
+            "pattern": "^(?!-0000-)-?([0-9]{4}|[1-9][0-9]{4,})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+          },
+          {
+            "description": "Accepts date objects: {/"year/":<int>, /"month/":<int>, /"day/":<int>}",
+            "type": "object",
+            "properties": {
+              "year": { "$ref": "#/definitions/integer" },
+              "month": { "type": "integer", "minimum": 1.0, "maximum": 12.0 },
+              "day": { "type": "integer", "minimum": 1.0, "maximum": 31.0 }
+            },
+            "required": [ "day", "month", "year" ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "integer": {
+        "title": "Catala Integer",
+        "anyOf": [
+          { "type": "integer" },
+          { "type": "string", "pattern": "^-?[0-9]+$" }
+        ]
+      }
+    }
+  }
+]
+```

@@ -220,10 +220,41 @@ let rat_encoding : Val.t encoding =
            (fun q -> Val.V (Decimal, q))
            (Runtime.ParsedJson.decimal_of_string s))
 
+(* A Catala integer in JSON held as a machine integer (the year of a date, the
+   components of a duration). One that does not fit raises the runtime error
+   [IntegerOverflow], whose bound depends on the backend. *)
+let machine_int_encoding : int encoding =
+  conv
+    (fun i -> Val.V (Integer, Z.of_int i))
+    (function
+      | Val.V (Integer, z) when Z.fits_int z -> Z.to_int z
+      | Val.V (Integer, _) ->
+        raise
+          (Json_encoding.Cannot_destruct
+             ([], Runtime.Error (IntegerOverflow, [], None)))
+      | v ->
+        Message.error ~internal:true
+          "Unexpected runtime value %a instead of int while decoding JSON"
+          Val.format v)
+    int_encoding
+
+(* The strings [Dates_calc.date_of_string] reads: exactly those
+   [Dates_calc.format_date] writes *)
+let date_pattern =
+  "^(?!-0000-)-?([0-9]{4}|[1-9][0-9]{4,})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+
 let date_encoding : Val.t encoding =
+  let date_string =
+    conv Fun.id Fun.id
+      ~schema:
+        Json_schema.(
+          create
+            (element (String { string_specs with pattern = Some date_pattern })))
+      string
+  in
   let date_obj =
     obj3
-      (req "year" (ranged_int ~minimum:0 ~maximum:9999 "years"))
+      (req "year" machine_int_encoding)
       (req "month" (ranged_int ~minimum:1 ~maximum:12 "months"))
       (req "day" (ranged_int ~minimum:1 ~maximum:31 "days"))
   in
@@ -233,8 +264,9 @@ let date_encoding : Val.t encoding =
          any_case
            ~description:
              "Accepts strings with the following format: YYYY-MM-DD, e.g., \
-              \"1970-01-31\""
-           string
+              \"1970-01-31\", the year having more digits beyond 9999 and a \
+              minus sign before 0 (\"-0738-02-03\")"
+           date_string
            (function
              | Val.V (Date, d) ->
                Some (Format.asprintf "%a" Dates_calc.format_date d)
@@ -243,7 +275,13 @@ let date_encoding : Val.t encoding =
                  "Unexpected runtime value %a instead of date while encoding \
                   to JSON"
                  Val.format v)
-           (fun s -> Val.V (Date, Dates_calc.date_of_string s));
+           (fun s ->
+             let fail e = raise (Json_encoding.Cannot_destruct ([], e)) in
+             try Val.V (Date, Dates_calc.date_of_string s) with
+             | Invalid_argument _ | Dates_calc.InvalidDate ->
+               fail (Failure (Printf.sprintf "invalid date %S" s))
+             | Dates_calc.Overflow ->
+               fail (Runtime.Error (IntegerOverflow, [], None)));
          any_case
            ~description:
              "Accepts date objects: {\"year\":<int>, \"month\":<int>, \
@@ -260,32 +298,14 @@ let date_encoding : Val.t encoding =
              Val.V (Date, Dates_calc.make_date ~year ~month ~day));
        ]
 
-(* A component of a duration: a Catala integer in JSON, held as a machine
-   integer. One that does not fit raises the runtime error [IntegerOverflow],
-   whose bound depends on the backend. *)
-let duration_component_encoding : int encoding =
-  conv
-    (fun i -> Val.V (Integer, Z.of_int i))
-    (function
-      | Val.V (Integer, z) when Z.fits_int z -> Z.to_int z
-      | Val.V (Integer, _) ->
-        raise
-          (Json_encoding.Cannot_destruct
-             ([], Runtime.Error (IntegerOverflow, [], None)))
-      | v ->
-        Message.error ~internal:true
-          "Unexpected runtime value %a instead of int while decoding JSON"
-          Val.format v)
-    int_encoding
-
 let duration_encoding : Val.t encoding =
   def "duration" ~title:"Catala duration"
   @@
   let encoding =
     obj3
-      (dft "years" duration_component_encoding 0)
-      (dft "months" duration_component_encoding 0)
-      (dft "days" duration_component_encoding 0)
+      (dft "years" machine_int_encoding 0)
+      (dft "months" machine_int_encoding 0)
+      (dft "days" machine_int_encoding 0)
     |> conv
          (function
            | Val.V (Duration, d) -> Dates_calc.period_to_ymds d
@@ -652,10 +672,19 @@ let parse_json ?pos enc text =
       Message.error ?pos "@[<v 2>Failed to parse JSON:@ %s at byte %d@]" msg
         offset
   in
+  (* A value of the schema that the runtime cannot hold, e.g. a duration
+     component or a year beyond a machine integer, raises its runtime error,
+     possibly under the alternatives of a union *)
+  let rec runtime_error path = function
+    | Json_encoding.Cannot_destruct (p, e) -> runtime_error (path @ p) e
+    | Json_encoding.No_case_matched errs ->
+      List.find_map (runtime_error path) errs
+    | Runtime.Error (err, _, _) -> Some (path, err)
+    | _ -> None
+  in
   try Exact_encoding.destruct enc json with
-  | Json_encoding.Cannot_destruct (path, Runtime.Error (err, _, _)) ->
-    (* A value of the schema that the runtime cannot hold, e.g. a duration
-       component beyond a machine integer: its runtime error *)
+  | e when Option.is_some (runtime_error [] e) ->
+    let path, err = Option.get (runtime_error [] e) in
     Message.error ?pos
       "@[<v>@[<hov>During evaluation:@ %a.@]@,\
        @[<hov>Reading the JSON value at@ %s.@]@]"

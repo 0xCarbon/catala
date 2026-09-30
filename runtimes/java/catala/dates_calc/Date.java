@@ -28,11 +28,14 @@ public class Date implements Comparable<Date> {
         this.day = day;
     }
 
-    private static final Pattern DATE_PATTERN = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})");
+    // Exactly the form toString writes
+    private static final Pattern DATE_PATTERN =
+        Pattern.compile("(?!-0000-)(-?(?:\\d{4}|[1-9]\\d{4,}))-(\\d{2})-(\\d{2})");
 
     public static Date fromString(String s) {
         Matcher matcher = DATE_PATTERN.matcher(s);
         if (matcher.matches()) {
+            // Beyond a machine integer: NumberFormatException
             int year = Integer.parseInt(matcher.group(1));
             int month = Integer.parseInt(matcher.group(2));
             int day = Integer.parseInt(matcher.group(3));
@@ -253,7 +256,11 @@ public class Date implements Comparable<Date> {
 
     @Override
     public String toString() {
-        // Format as ISO 8601 date (YYYY-MM-DD)
-        return String.format("%04d-%02d-%02d", this.year, this.month, this.day);
+        // YYYY-MM-DD (ISO 8601) for the years 0 to 9999; beyond them the year
+        // has more digits, and a negative year has a minus sign followed by at
+        // least four digits: -0738-02-03, 2737909006-12-28
+        String abs = Long.toString(Math.abs((long) this.year));
+        return (this.year < 0 ? "-" : "") + "0".repeat(Math.max(0, 4 - abs.length()))
+            + abs + String.format("-%02d-%02d", this.month, this.day);
     }
 }

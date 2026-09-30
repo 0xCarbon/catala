@@ -605,12 +605,25 @@ let translate_literal l pos =
                    (integer_of_string i.money_amount_units)
                    int100)
                 (integer_of_string i.money_amount_cents))))
-  | S.LNumber ((Int i, _), Some (Year, _)) ->
-    LDuration (Runtime.duration_of_numbers (int_of_string i) 0 0)
-  | S.LNumber ((Int i, _), Some (Month, _)) ->
-    LDuration (Runtime.duration_of_numbers 0 (int_of_string i) 0)
-  | S.LNumber ((Int i, _), Some (Day, _)) ->
-    LDuration (Runtime.duration_of_numbers 0 0 (int_of_string i))
+  | S.LNumber ((Int i, _), Some (((Year | Month | Day) as unit), _)) ->
+    (* The components of a duration are machine integers *)
+    let units, of_n =
+      match unit with
+      | Year -> "years", fun n -> Runtime.duration_of_numbers n 0 0
+      | Month -> "months", fun n -> Runtime.duration_of_numbers 0 n 0
+      | _ -> "days", fun n -> Runtime.duration_of_numbers 0 0 n
+    in
+    let n =
+      match int_of_string_opt i with
+      | Some n -> n
+      | None ->
+        Message.error ~pos "%a" Format.pp_print_text
+          (Printf.sprintf
+             "This number of %s is too large for a duration, whose components \
+              are machine integers."
+             units)
+    in
+    LDuration (of_n n)
   | S.LNumber ((Dec (_, _), _), Some ((Year | Month | Day), _)) ->
     Message.error ~pos
       "Impossible to specify decimal amounts of days, months or years."

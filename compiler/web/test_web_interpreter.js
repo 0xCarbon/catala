@@ -274,6 +274,24 @@ scope Test:
   assertContains(getErrorText(result), 'an integer is too large for this computation', 'Should report IntegerOverflow');
 });
 
+test('Duration literal beyond 32-bit machine integers is reported at the literal', () => {
+  const code = `
+\`\`\`catala
+declaration scope Test:
+  output result content duration
+
+scope Test:
+  definition result equals 2147483648 day
+\`\`\`
+`;
+  const result = exports.interpret({
+    files: { 'test.catala_en': code },
+    scope: 'Test'
+  });
+  assertEquals(result.success, false, 'Should fail');
+  assertContains(getErrorText(result), 'This number of days is too large for a duration', 'Should report the literal');
+});
+
 test('Syntax error gives position', () => {
   const code = `
 \`\`\`catala

@@ -1,0 +1,27 @@
+# Duration literals beyond machine integers
+
+The components of a duration are machine integers: a literal number of days,
+months or years that does not fit one is reported at the literal.
+
+```catala
+declaration scope S:
+  output d content duration
+
+scope S:
+  definition d equals 99999999999999999999 day
+```
+
+```catala-test-cli
+$ catala typecheck
+┌─[ERROR]─
+│
+│  This number of days is too large for a duration, whose components are
+│  machine integers.
+│
+├─➤ tests/date/bad/duration_literal_too_large.catala_en:11.23-47:
+│    │
+│ 11 │   definition d equals 99999999999999999999 day
+│    │                       ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+└─ Duration literals beyond machine integers
+#return code 123#
+```

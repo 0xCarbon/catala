@@ -77,6 +77,10 @@ in behavior visible for the end-users of the tooling.
   language (`Usage de`, `Inclusion` in French), and inlining works when the
   main file is given as a relative path in the current directory.
 
+* Fix duration literals beyond machine integers
+  (`99999999999999999999 day`, or beyond 2^31 under js_of_ocaml): they are
+  reported at the literal instead of failing with `int_of_string`.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

@@ -1285,15 +1285,24 @@ CATALA_MONEY o_add_mon_mon (CATALA_MONEY x1, CATALA_MONEY x2)
   return ret;
 }
 
+/* Raises the error of an unsuccessful date computation */
+void check_date_computation (dc_success result,
+                             const catala_code_position* pos)
+{
+  if (result == dc_overflow)
+    catala_error(catala_integer_overflow, pos, pos ? 1 : 0, NULL);
+  else if (result != dc_ok)
+    catala_error(catala_date_error, pos, pos ? 1 : 0,
+                 "ambiguous date computation with no rounding mode specified");
+}
+
 CATALA_DATE o_add_dat_dur (dc_date_rounding mode,
                            const catala_code_position* pos,
                            CATALA_DATE x1,
                            CATALA_DURATION x2)
 {
   dc_date *ret = catala_malloc(sizeof(dc_date));
-  if (dc_add_dates(ret, mode, x1, x2) != dc_ok)
-    catala_error(catala_date_error, pos, 1,
-                 "ambiguous date computation with no rounding mode specified");
+  check_date_computation(dc_add_dates(ret, mode, x1, x2), pos);
   return ret;
 }
 
@@ -1326,10 +1335,11 @@ CATALA_MONEY o_sub_mon_mon (CATALA_MONEY x1, CATALA_MONEY x2)
   return ret;
 }
 
-CATALA_DURATION o_sub_dat_dat (CATALA_DATE x1, CATALA_DATE x2)
+CATALA_DURATION o_sub_dat_dat (const catala_code_position* pos,
+                               CATALA_DATE x1, CATALA_DATE x2)
 {
   dc_period *ret = catala_malloc(sizeof(dc_period));
-  dc_sub_dates(ret, x1, x2);
+  check_date_computation(dc_sub_dates(ret, x1, x2), pos);
   return ret;
 }
 
@@ -1340,9 +1350,7 @@ CATALA_DATE o_sub_dat_dur (dc_date_rounding mode,
   dc_period dur;
   dc_date *ret = catala_malloc(sizeof(dc_date));
   checked_period(&dur, pos, NULL, x2, 1);
-  if (dc_add_dates(ret, mode, x1, &dur) != dc_ok)
-    catala_error(catala_date_error, pos, 1,
-                 "ambiguous date computation with no rounding mode specified");
+  check_date_computation(dc_add_dates(ret, mode, x1, &dur), pos);
   return ret;
 }
 

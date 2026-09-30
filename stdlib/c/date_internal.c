@@ -46,14 +46,14 @@ CATALA_DATE DateInternal__add_rounded_down
     (CATALA_DATE d, CATALA_DURATION dur)
 {
   dc_date *ret = catala_malloc(sizeof(dc_date));
-  dc_add_dates(ret, dc_date_round_down, d, dur);
+  check_date_computation(dc_add_dates(ret, dc_date_round_down, d, dur), NULL);
   return ret;
 }
 
 CATALA_DATE DateInternal__add_rounded_up (CATALA_DATE d, CATALA_DURATION dur)
 {
   dc_date *ret = catala_malloc(sizeof(dc_date));
-  dc_add_dates(ret, dc_date_round_up, d, dur);
+  check_date_computation(dc_add_dates(ret, dc_date_round_up, d, dur), NULL);
   return ret;
 }
 

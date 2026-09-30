@@ -36,12 +36,14 @@ let last_day_of_month : date -> date =
 (* Toplevel def add_rounded_down *)
 let add_rounded_down : date -> duration -> date =
  fun (d : date) (dur : duration) ->
-  Dates_calc.add_dates d dur ~round:Dates_calc.RoundDown
+  try Dates_calc.add_dates d dur ~round:Dates_calc.RoundDown
+  with Dates_calc.Overflow -> raise (Error (IntegerOverflow, [], None))
 
 (* Toplevel def add_rounded_up *)
 let add_rounded_up : date -> duration -> date =
  fun (d : date) (dur : duration) ->
-  Dates_calc.add_dates d dur ~round:Dates_calc.RoundUp
+  try Dates_calc.add_dates d dur ~round:Dates_calc.RoundUp
+  with Dates_calc.Overflow -> raise (Error (IntegerOverflow, [], None))
 
 let () =
   Catala_runtime.register_module "Date_internal"

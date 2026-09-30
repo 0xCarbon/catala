@@ -50,19 +50,33 @@ def days_in_month(*, month : int, is_leap_year : bool) -> int:
 
 def add_months_to_first_of_month_date(*, year : int, month : int, months : int) -> tuple[int, int]:
     """
-    Returns new `year, month`.
+    Returns new `year, month`, in constant time.
     Precondition: `1 <= month <= 12`
     """
-    new_month = month + months
-    if 1 <= new_month and new_month <= 12: return year, new_month
-    elif new_month > 12: return add_months_to_first_of_month_date(year = year + 1,
-                                                                  month = month,
-                                                                  months = months - 12)
-    else:
-        # new_month <= 0
-        return add_months_to_first_of_month_date(year = year - 1,
-                                                 month = month,
-                                                 months = months + 12)
+    years, new_month = divmod(month - 1 + months, 12)
+    return year + years, new_month + 1
+
+# The Gregorian calendar repeats every 400 years, which have 146097 days
+DAYS_IN_400_YEARS = 146097
+
+def day_number(year : int, month : int, day : int) -> int:
+    """The number of days from 0000-03-01 to `year-month-day`
+    (H. Hinnant's `days_from_civil`)"""
+    y = year - 1 if month <= 2 else year
+    era, yoe = divmod(y, 400)
+    doy = (153 * (month - 3 if month > 2 else month + 9) + 2) // 5 + day - 1
+    doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
+    return era * DAYS_IN_400_YEARS + doe
+
+def of_day_number(n : int) -> tuple[int, int, int]:
+    """The inverse of `day_number`"""
+    era, doe = divmod(n, DAYS_IN_400_YEARS)
+    yoe = (doe - doe // 1460 + doe // 36524 - doe // 146096) // 365
+    doy = doe - (365 * yoe + yoe // 4 - yoe // 100)
+    mp = (5 * doy + 2) // 153
+    day = doy - (153 * mp + 2) // 5 + 1
+    month = mp + 3 if mp < 10 else mp - 9
+    return yoe + era * 400 + (1 if month <= 2 else 0), month, day
 
 # A hack to do custom infix operators, documented here: https://tomerfiliba.com/blog/Infix-Operators
 class Infix(object):
@@ -166,51 +180,9 @@ class Date:
         return new_date.round(round)
 
     def add_dates_days(self, days : int) -> Date:
-        # Hello, dear reader! Buckle up because it will be a hard ride. The first
-        # thing to do here is to retrieve how many days there are in the current
-        # month of [d].
-        days_in_self_month = days_in_month(month = self.month,
-                                           is_leap_year = is_leap_year(self.year))
-        # Now, we case analyze of the situation. To do that, we add the current days
-        # of the month with [days], and see what happens. Beware, [days] is algebraic
-        # and can be negative!
-        new_day = self.day + days
-        if 1 <= new_day and new_day <= days_in_self_month:
-            # The first case is the easy one: when you add [days], the new day keeps
-            # being a valid day in the current month. All is good, we simply warp to
-            # that new date without any further changes.
-            return Date(year = self.year, month = self.month, day = new_day)
-        elif new_day >= days_in_self_month:
-            # Now, we deal with the case where there is an overflow : you have added
-            # too many days and the current month cannot handle them any more. The
-            # strategy here is to fill the current month, and let the next month handle
-            # the situation via a recursive call.
-            new_year, new_month = add_months_to_first_of_month_date(year = self.year,
-                                                                    month = self.month,
-                                                                    months = 1)
-            # We warp to the first day of the next month!
-            # Now we compute how many days we still have left to add. Because we have
-            # warped to the next month, we already have added the rest of the days in
-            # the current month: [days_in_d_month - d.day]. But then we switch
-            # months, and that corresponds to adding another day.
-            return Date(year = new_year,
-                        month = new_month,
-                        day = 1).add_dates_days(days - (days_in_self_month - self.day) - 1)
-        else:
-            # The last case is symmetrical, we substracted too many days and the
-            # current month can't handle it. So we warp to the previous month and let a
-            # recursive call handle the situation from there.
-            new_year, new_month = add_months_to_first_of_month_date(year = self.year,
-                                                                    month = self.month,
-                                                                    months = -1)
-            # We warp to the last day of the previous month.
-            # What remains to be substracted (as [days] is negative) has to be
-            # diminished by the number of days of the date in the current month. 
-            return Date(year = new_year,
-                        month = new_month,
-                        day = days_in_month(month = new_month,
-                                            is_leap_year = is_leap_year(new_year))
-                        ).add_dates_days(days + self.day)
+        # In constant time, with day numbers
+        year, month, day = of_day_number(day_number(self.year, self.month, self.day) + days)
+        return Date(year = year, month = month, day = day)
 
     def __add__(self, p : Period, round : DateRounding = DateRounding.AbortOnRound) -> Date:
         d = self.add_dates_years(p.years, round)
@@ -221,35 +193,10 @@ class Date:
         return d
 
     def __sub__(self, other : Date) -> Period:
-        if self.year == other.year and self.month == other.month:
-            # Easy case: the two dates are in the same month.
-            return Period(years = 0, months = 0, days = self.day - other.day)
-        else:
-            # Otherwise we'll add a month forward if d2 is after d1.
-            if self < other:
-                # The case were d1 is after d2 is symmetrical so we handle it via a
-                # recursive call changing the order of the arguments.
-                return - (other - self)
-            else:
-                # We know self > other
-                # We wrap d1 to the first day of the next month
-                new_other_year, new_other_month = add_months_to_first_of_month_date(
-                    year = other.year,
-                    month = other.month,
-                    months = 1)
-                new_other = Date(year = new_other_year, month = new_other_month, day = 1)
-                # Next we divide the result between the number of days we've added to go
-                # to the end of the month, and the remaining handled by a recursive
-                # call.
-                return Period(years = 0, months = 0,
-                              # The number of days is the difference between the last day of the
-                              # month and the current day of d1, plus one day because we go to
-                              # the next month.
-                              days = days_in_month(month=other.month,
-                                                   is_leap_year=is_leap_year(other.year)) \
-                              - other.day + 1
-                              ) + (self - new_other)
-
+        # In constant time: always a number of days
+        return Period(years = 0, months = 0,
+                      days = day_number(self.year, self.month, self.day)
+                      - day_number(other.year, other.month, other.day))
 
     def __eq__(self, other):
         return self.year == other.year \

@@ -117,11 +117,11 @@ PeriodInternal__split_by_month(const CATALA_TUPLE(CATALA_DATE; CATALA_DATE) p)
   while (1) {
     next = catala_malloc(sizeof(dc_date));
     dc_first_day_of_month(&tmp, start);
-    dc_add_dates(next, dc_date_round_abort, &tmp, &one_month);
+    check_date_computation(dc_add_dates(next, dc_date_round_abort, &tmp, &one_month), NULL);
 
     if (dc_compare_dates(next, stop) < 0){
       next_end = catala_malloc(sizeof(dc_date));
-      dc_add_dates(next_end, dc_date_round_abort, next, &m_one_day);
+      check_date_computation(dc_add_dates(next_end, dc_date_round_abort, next, &m_one_day), NULL);
       ret->elements[idx++] = mk_period(start, next_end);
       start = next;
       continue;
@@ -182,11 +182,11 @@ PeriodInternal__split_by_year(CATALA_INT start_month, const CATALA_TUPLE(CATALA_
   while (1) {
     next = catala_malloc(sizeof(dc_date));
     first_day_of_rolling_year(&tmp, start, start_month);
-    dc_add_dates(next, dc_date_round_abort, &tmp, &one_year);
+    check_date_computation(dc_add_dates(next, dc_date_round_abort, &tmp, &one_year), NULL);
 
     if (dc_compare_dates(next, stop) < 0){
       next_end = catala_malloc(sizeof(dc_date));
-      dc_add_dates(next_end, dc_date_round_abort, next, &m_one_day);
+      check_date_computation(dc_add_dates(next_end, dc_date_round_abort, next, &m_one_day), NULL);
       ret->elements[idx++] = mk_period(start, next_end);
       start = next;
       continue;

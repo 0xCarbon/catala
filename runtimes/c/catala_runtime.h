@@ -352,7 +352,11 @@ CATALA_DEC o_sub_rat_rat (CATALA_DEC x1, CATALA_DEC x2);
 
 CATALA_MONEY o_sub_mon_mon (CATALA_MONEY x1, CATALA_MONEY x2);
 
-CATALA_DURATION o_sub_dat_dat (CATALA_DATE x1, CATALA_DATE x2);
+CATALA_DURATION o_sub_dat_dat (const catala_code_position* pos,
+                               CATALA_DATE x1, CATALA_DATE x2);
+
+void check_date_computation (dc_success result,
+                             const catala_code_position* pos);
 
 CATALA_DATE o_sub_dat_dur (dc_date_rounding mode,
                            const catala_code_position* pos,

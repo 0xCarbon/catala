@@ -54,6 +54,12 @@ in behavior visible for the end-users of the tooling.
   the value (they hung or crashed), `Date.of_year_month_day` reports an invalid
   date, and `List.sequence` raises `IntegerOverflow`.
 
+* Fix date arithmetic on large durations: adding or subtracting years,
+  months and days, and the difference of two dates, take time independent of
+  their size (they looped month by month: `|2000-01-01| + 1000000000000 day`
+  did not terminate, and C and Java exhausted the stack); a resulting year
+  beyond a machine integer raises `IntegerOverflow`.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

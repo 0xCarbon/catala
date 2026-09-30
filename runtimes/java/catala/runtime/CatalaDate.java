@@ -65,15 +65,25 @@ public final class CatalaDate extends CatalaValue<CatalaDate> {
             return new CatalaDate(this.date.add(dur.period));
         } catch (AmbiguousComputationException e) {
             throw CatalaError.error(CatalaError.Error.DateError, pos, "ambiguous date computation with no rounding mode specified");
+        } catch (ArithmeticException e) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow, pos);
         }
     }
 
     public CatalaDate addDurationRoundUp(CatalaPosition pos, CatalaDuration dur) {
-        return new CatalaDate(this.date.add(dur.period, Rounding.ROUND_UP));
+        try {
+            return new CatalaDate(this.date.add(dur.period, Rounding.ROUND_UP));
+        } catch (ArithmeticException e) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow, pos);
+        }
     }
 
     public CatalaDate addDurationRoundDown(CatalaPosition pos, CatalaDuration dur) {
-        return new CatalaDate(this.date.add(dur.period, Rounding.ROUND_DOWN));
+        try {
+            return new CatalaDate(this.date.add(dur.period, Rounding.ROUND_DOWN));
+        } catch (ArithmeticException e) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow, pos);
+        }
     }
 
     public CatalaDate subDurationAbortOnRound(CatalaPosition pos, CatalaDuration dur) {
@@ -81,19 +91,33 @@ public final class CatalaDate extends CatalaValue<CatalaDate> {
             return new CatalaDate(this.date.add(dur.negate().period));
         } catch (AmbiguousComputationException e) {
             throw CatalaError.error(CatalaError.Error.DateError, pos, "ambiguous date computation with no rounding mode specified");
+        } catch (ArithmeticException e) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow, pos);
         }
     }
 
     public CatalaDate subDurationRoundUp(CatalaPosition pos, CatalaDuration dur) {
-        return new CatalaDate(this.date.add(dur.negate().period, Rounding.ROUND_UP));
+        try {
+            return new CatalaDate(this.date.add(dur.negate().period, Rounding.ROUND_UP));
+        } catch (ArithmeticException e) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow, pos);
+        }
     }
 
     public CatalaDate subDurationRoundDown(CatalaPosition pos, CatalaDuration dur) {
-        return new CatalaDate(this.date.add(dur.negate().period, Rounding.ROUND_DOWN));
+        try {
+            return new CatalaDate(this.date.add(dur.negate().period, Rounding.ROUND_DOWN));
+        } catch (ArithmeticException e) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow, pos);
+        }
     }
 
     public CatalaDuration subtract(CatalaDate date) {
-        return new CatalaDuration(this.date.sub(date.date));
+        try {
+            return new CatalaDuration(this.date.sub(date.date));
+        } catch (ArithmeticException e) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow);
+        }
     }
 
     @Override

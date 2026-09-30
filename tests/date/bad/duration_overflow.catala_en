@@ -101,3 +101,28 @@ $ catala test-scope Arithmetic --input {"op":3}
 └─ Durations of more units than machine integers hold
 #return code 123#
 ```
+
+A date whose year does not fit a machine integer:
+
+```catala
+declaration scope FarDate:
+  input years content integer
+  output d content date
+
+scope FarDate:
+  definition d equals |2000-01-01| + 1 year * years
+```
+
+```catala-test-cli
+$ catala test-scope FarDate --input {"years":"4611686018427387000"}
+┌─[ERROR]─
+│
+│  During evaluation: an integer is too large for this computation.
+│
+├─➤ tests/date/bad/duration_overflow.catala_en:113.36-37:
+│     │
+│ 113 │   definition d equals |2000-01-01| + 1 year * years
+│     │                                    ‾
+└─ Durations of more units than machine integers hold
+#return code 123#
+```

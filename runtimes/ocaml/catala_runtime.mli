@@ -551,7 +551,10 @@ module Oper : sig
   val o_sub_int_int : integer -> integer -> integer
   val o_sub_rat_rat : decimal -> decimal -> decimal
   val o_sub_mon_mon : money -> money -> money
-  val o_sub_dat_dat : date -> date -> duration
+
+  val o_sub_dat_dat : code_location -> date -> date -> duration
+  (** @raise Runtime.IntegerOverflow *)
+
   val o_sub_dat_dur : date_rounding -> code_location -> date -> duration -> date
 
   val o_sub_dur_dur : code_location -> duration -> duration -> duration

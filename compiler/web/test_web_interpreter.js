@@ -238,6 +238,42 @@ scope Test:
   assertContains(getErrorText(result), 'an integer is too large for this computation', 'Should report IntegerOverflow');
 });
 
+test('Date years within 32-bit machine integers', () => {
+  const code = `
+\`\`\`catala
+declaration scope Test:
+  output result content date
+
+scope Test:
+  definition result equals |2000-01-01| + 2147481000 year
+\`\`\`
+`;
+  const result = exports.interpret({
+    files: { 'test.catala_en': code },
+    scope: 'Test'
+  });
+  assertEquals(result.success, true, 'Should succeed');
+  assertContains(result.output, '2147483000-01-01', 'Should not wrap');
+});
+
+test('Date year beyond 32-bit machine integers is IntegerOverflow', () => {
+  const code = `
+\`\`\`catala
+declaration scope Test:
+  output result content date
+
+scope Test:
+  definition result equals |2000-01-01| + 2147483000 year
+\`\`\`
+`;
+  const result = exports.interpret({
+    files: { 'test.catala_en': code },
+    scope: 'Test'
+  });
+  assertEquals(result.success, false, 'Should fail');
+  assertContains(getErrorText(result), 'an integer is too large for this computation', 'Should report IntegerOverflow');
+});
+
 test('Syntax error gives position', () => {
   const code = `
 \`\`\`catala

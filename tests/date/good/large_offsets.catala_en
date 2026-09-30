@@ -1,0 +1,32 @@
+# Date arithmetic with large offsets
+
+Adding days or months and subtracting dates take time independent of the size
+of the offset (the offsets stay within 32-bit integers, for the Java runtime).
+
+```catala
+#[test]
+declaration scope LargeOffsets:
+  output far_days content date
+  output far_months content date
+  output back content duration
+  output year_before content date
+  output two_years_before content date
+
+scope LargeOffsets:
+  definition far_days equals |2000-01-01| + 2000000000 day
+  definition far_months equals |2000-01-01| + 2000000000 month
+  definition back equals far_days - |2000-01-01|
+  definition year_before equals |2000-01-15| - 12 month
+  definition two_years_before equals |2000-01-15| - 24 month
+```
+
+```catala-test-cli
+$ catala test-scope LargeOffsets
+┌─[RESULT]─ LargeOffsets ─
+│ far_days = |5477814-01-06|
+│ far_months = |166668666-09-01|
+│ back = [2000000000 days]
+│ year_before = |1999-01-15|
+│ two_years_before = |1998-01-15|
+└─
+```

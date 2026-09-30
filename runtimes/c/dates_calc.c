@@ -15,6 +15,7 @@
    the License. */
 
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 
 #define BOOL int
@@ -34,7 +35,8 @@
 */
 
 typedef enum dc_success {
-  dc_error, dc_ok
+  dc_error, dc_ok,
+  dc_overflow /* a year or a number of days beyond long int */
 } dc_success;
 
 typedef enum dc_date_rounding {
@@ -136,14 +138,63 @@ void dc_copy_date(dc_date *ret, const dc_date *d) {
 }
 
 /* Precondition: [1 <= d->month <= 12]. The returned day is always [1] */
-void dc_add_months(dc_date *ret, const dc_date *d, const long int months) {
-  long int month = d->month - 1 + months;
-  /* The month variable is shifted -1 to be in range [0, 11] for modulo
-     calculations */
-  /*  assert (1 <= d->month && d->month <= 12); */
+/* Arithmetic on long ints that reports [dc_overflow] instead of wrapping */
+static dc_success add_long (long int *ret, long int a, long int b) {
+  if ((b > 0 && a > LONG_MAX - b) || (b < 0 && a < LONG_MIN - b))
+    return dc_overflow;
+  *ret = a + b;
+  return dc_ok;
+}
+
+/* For [c > 0] */
+static dc_success mul_long (long int *ret, long int a, long int c) {
+  if (a > LONG_MAX / c || a < LONG_MIN / c) return dc_overflow;
+  *ret = a * c;
+  return dc_ok;
+}
+
+/* Division rounding towards minus infinity, for [b > 0] */
+static long int floor_div (long int a, long int b) {
+  return a >= 0 ? a / b : -((-(a + 1)) / b) - 1;
+}
+
+/* The Gregorian calendar repeats every 400 years, which have 146097 days */
+#define DAYS_IN_400_YEARS 146097L
+
+/* The number of days from 0000-03-01 to [year-month-day], for small years
+   (H. Hinnant's [days_from_civil]) */
+static long int day_number (long int year, long int month, long int day) {
+  long int y = month <= 2 ? year - 1 : year;
+  long int era = floor_div(y, 400);
+  long int yoe = y - era * 400;
+  long int doy = (153 * (month > 2 ? month - 3 : month + 9) + 2) / 5 + day - 1;
+  long int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * DAYS_IN_400_YEARS + doe;
+}
+
+/* The inverse of [day_number] */
+static void of_day_number (dc_date *ret, long int n) {
+  long int era = floor_div(n, DAYS_IN_400_YEARS);
+  long int doe = n - era * DAYS_IN_400_YEARS;
+  long int yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  long int doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  long int mp = (5 * doy + 2) / 153;
+  long int month = mp < 10 ? mp + 3 : mp - 9;
+  ret->day = doy - (153 * mp + 2) / 5 + 1;
+  ret->month = month;
+  ret->year = yoe + era * 400 + (month <= 2 ? 1 : 0);
+}
+
+/* The first day of the month [months] after that of [d], in constant time */
+dc_success dc_add_months(dc_date *ret, const dc_date *d, const long int months) {
+  long int total, years;
+  if (add_long(&total, (long int) d->month - 1, months) != dc_ok)
+    return dc_overflow;
+  years = floor_div(total, 12);
+  if (add_long(&ret->year, d->year, years) != dc_ok) return dc_overflow;
+  ret->month = total - years * 12 + 1;
   ret->day = 1;
-  ret->month = (month >= 0 ? month % 12 : month % 12 + 12) + 1;
-  ret->year = d->year + (month >= 0 ? month / 12 : month / 12 - 1);
+  return dc_ok;
 }
 
 /* If the date is valid, does nothing. We expect the month number to be always
@@ -166,14 +217,14 @@ void dc_prev_valid_date (dc_date *ret, const dc_date *d) {
    valid when calling this. If the date is invalid due to the day number, then
    this function rounds down: if the day number is >= days_in_month, to the
    first day of the next month. */
-void dc_next_valid_date (dc_date *ret, const dc_date *d) {
+dc_success dc_next_valid_date (dc_date *ret, const dc_date *d) {
   assert (1 <= d->month && d->month <= 12);
   assert (1 <= d->day && d->day <= 31);
-  if (dc_is_valid_date(d))
+  if (dc_is_valid_date(d)) {
     dc_copy_date(ret, d);
-  else {
-    dc_add_months (ret, d, 1);
-  }
+    return dc_ok;
+  } else
+    return dc_add_months (ret, d, 1);
 }
 
 dc_success dc_round_date (dc_date *ret, const dc_date_rounding rnd, const dc_date *d) {
@@ -185,71 +236,42 @@ dc_success dc_round_date (dc_date *ret, const dc_date_rounding rnd, const dc_dat
       dc_prev_valid_date(ret, d);
       return dc_ok;
     case dc_date_round_up:
-      dc_next_valid_date(ret, d);
-      return dc_ok;
+      return dc_next_valid_date(ret, d);
     default:
       return dc_error;
     }
 }
 
-void add_dates_days (dc_date *ret, const dc_date *d, const long int days) {
-  unsigned long int days_in_d_month;
-  unsigned long int day_num;
-  /* Hello, dear reader! Buckle up because it will be a hard ride. The first
-     thing to do here is to retrieve how many days there are in the current
-     month of [d]. */
-  days_in_d_month = dc_days_in_month(d);
-  /* Now, we case analyze of the situation. To do that, we add the current days
-     of the month with [days], and see what happens. Beware, [days] is algebraic
-     and can be negative! */
-  day_num = d->day + days;
-  if (day_num < 1) {
-    /* we substracted too many days and the current month can't handle it. So we
-       warp to the previous month and let a recursive call handle the situation
-       from there. */
-    dc_date d1;
-    /* We warp to the last day of the previous month. */
-    dc_add_months(&d1, d, -1);
-    d1.day = dc_days_in_month(&d1);
-    /* What remains to be substracted (as [days] is negative) has to be
-       diminished by the number of days of the date in the current month. */
-    add_dates_days(ret, &d1, days + d->day);
-  } else if (days_in_d_month < day_num) {
-    /* Here there is an overflow : you have added too many days and the current
-       month cannot handle them any more. The strategy here is to fill the
-       current month, and let the next month handle the situation via a
-       recursive call. */
-    dc_date d1;
-    /* We warp to the first day of the next month! */
-    dc_add_months(&d1, d, 1);
-    /* Now we compute how many days we still have left to add. Because we have
-       warped to the next month, we already have added the rest of the days in
-       the current month: [days_in_d_month - d.day]. But then we switch
-       months, and that corresponds to adding another day. */
-    add_dates_days(ret, &d1, days - (days_in_d_month - d->day) - 1);
-  } else {
-    /* this is the easy case: when you add [days], the new day keeps
-       being a valid day in the current month. All is good, we simply warp to
-       that new date without any further changes. */
-    ret->year = d->year;
-    ret->month = d->month;
-    ret->day = day_num;
-  }
+/* In constant time: whole 400-year cycles, then day numbers within a cycle */
+static dc_success add_dates_days (dc_date *ret, const dc_date *d, const long int days) {
+  long int cycles = floor_div(days, DAYS_IN_400_YEARS);
+  long int rest = days - cycles * DAYS_IN_400_YEARS;
+  long int base = floor_div(d->year, 400);
+  long int y0 = d->year - base * 400;
+  long int year, shift;
+  of_day_number(ret, day_number(y0, d->month, d->day) + rest);
+  if (mul_long(&year, base, 400) != dc_ok
+      || add_long(&year, year, ret->year) != dc_ok
+      || mul_long(&shift, cycles, 400) != dc_ok
+      || add_long(&year, year, shift) != dc_ok)
+    return dc_overflow;
+  ret->year = year;
+  return dc_ok;
 }
 
 dc_success dc_add_dates (dc_date *ret, const dc_date_rounding rnd, const dc_date *d, const dc_period *p) {
   dc_success success;
-  ret->year = d->year + p->years;
-  ret->month = d->month;
+  dc_date tmp;
+  if (add_long(&tmp.year, d->year, p->years) != dc_ok) return dc_overflow;
+  tmp.month = d->month;
   /* NB: at this point, the date may not be correct.
      Rounding is performed after add_months */
-  dc_add_months(ret, ret, p->months);
-  ret->day = d->day;
-  success = dc_round_date(ret, rnd, ret);
-  if (success == dc_ok) {
-    add_dates_days(ret, ret, p->days);
-    return dc_ok;
-  } else
+  if (dc_add_months(&tmp, &tmp, p->months) != dc_ok) return dc_overflow;
+  tmp.day = d->day;
+  success = dc_round_date(ret, rnd, &tmp);
+  if (success == dc_ok)
+    return add_dates_days(ret, ret, p->days);
+  else
     return success;
 }
 
@@ -301,31 +323,20 @@ void dc_neg_period (dc_period *ret, const dc_period *p) {
   ret->days = - p->days;
 }
 
-/* The returned [period] is always expressed as a number of days. */
-void dc_sub_dates (dc_period *ret, const dc_date *d1, const dc_date *d2) {
+/* The returned [period] is always expressed as a number of days, computed in
+   constant time. */
+dc_success dc_sub_dates (dc_period *ret, const dc_date *d1, const dc_date *d2) {
+  long int c1 = floor_div(d1->year, 400), c2 = floor_div(d2->year, 400);
+  long int days = day_number(d1->year - c1 * 400, d1->month, d1->day)
+    - day_number(d2->year - c2 * 400, d2->month, d2->day);
+  long int cycles;
   ret->years = 0;
   ret->months = 0;
-  if (d1->year == d2->year && d1->month == d2->month) {
-    /* Easy case: the two dates are in the same month. */
-    ret->days = d1->day - d2->day;
-  } else if (dc_compare_dates(d1, d2) < 0) {
-    /* The case were d1 is after d2 is symmetrical so we handle it via a
-       recursive call changing the order of the arguments. */
-    dc_sub_dates(ret, d2, d1);
-    dc_neg_period(ret, ret);
-  } else { /* d1 > d2 : */
-    /* We warp d2 to the first day of the next month. */
-    dc_date d2x;
-    dc_add_months(&d2x, d2, 1);
-    /* Next we divide the result between the number of days we've added to go
-       to the end of the month, and the remaining handled by a recursive
-       call. */
-    dc_sub_dates(ret, d1, &d2x);
-    /* The number of days is the difference between the last day of the
-       month and the current day of d1, plus one day because we go to
-       the next month. */
-    ret->days += dc_days_in_month(d2) - d2->day + 1;
-  }
+  if (c2 == LONG_MIN || add_long(&cycles, c1, -c2) != dc_ok
+      || mul_long(&cycles, cycles, DAYS_IN_400_YEARS) != dc_ok
+      || add_long(&ret->days, cycles, days) != dc_ok)
+    return dc_overflow;
+  return dc_ok;
 }
 
 long int dc_date_year(const dc_date *d) {

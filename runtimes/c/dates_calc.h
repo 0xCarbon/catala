@@ -18,7 +18,8 @@
 #define __DATES_CALC_H__
 
 typedef enum dc_success {
-  dc_error, dc_ok
+  dc_error, dc_ok,
+  dc_overflow /* a year or a number of days beyond long int */
 } dc_success;
 
 
@@ -39,7 +40,7 @@ dc_success dc_make_date(dc_date *ret, const long int y, const unsigned long int 
 
 dc_success dc_add_dates (dc_date *ret, const dc_date_rounding rnd, const dc_date *d, const dc_period *p);
 
-void dc_sub_dates (dc_period *ret, const dc_date *d1, const dc_date *d2);
+dc_success dc_sub_dates (dc_period *ret, const dc_date *d1, const dc_date *d2);
 
 int dc_compare_dates (const dc_date *d1, const dc_date *d2);
 

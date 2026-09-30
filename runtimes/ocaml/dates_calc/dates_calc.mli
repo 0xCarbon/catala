@@ -23,6 +23,10 @@ type period
 exception InvalidDate
 exception AmbiguousComputation
 
+exception Overflow
+(** Raised by date computations whose resulting year does not fit a machine
+    integer *)
+
 type date_rounding =
   | RoundUp
   | RoundDown

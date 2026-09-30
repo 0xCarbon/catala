@@ -248,7 +248,7 @@ let rec evaluate_operator
   | Sub_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
     ELit (LMoney (o_sub_mon_mon x y))
   | Sub_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-    ELit (LDuration (o_sub_dat_dat x y))
+    ELit (LDuration (o_sub_dat_dat (rpos ()) x y))
   | Sub_dat_dur r, [(ELit (LDate x), _); (ELit (LDuration y), _)] ->
     ELit (LDate (o_sub_dat_dur r (rpos ()) x y))
   | Sub_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->

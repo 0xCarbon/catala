@@ -25,6 +25,9 @@ type period = { years : int; months : int; days : int }
 exception InvalidDate
 exception AmbiguousComputation
 
+exception Overflow
+(** A year beyond machine integers *)
+
 type date_rounding =
   | RoundUp
   | RoundDown
@@ -91,20 +94,66 @@ let make_date ~(year : int) ~(month : int) ~(day : int) : date =
   let d = { year; month; day } in
   if is_valid_date d then d else raise InvalidDate
 
-(** Returns new [year, month]. Precondition: [1 <= month <= 12] *)
-let rec add_months_to_first_of_month_date
+(* Machine-integer arithmetic that raises [Overflow] instead of wrapping *)
+let add_int (a : int) (b : int) : int =
+  let r = a + b in
+  if a >= 0 = (b >= 0) && r >= 0 <> (a >= 0) then raise Overflow else r
+
+let neg_int (a : int) : int = if a = min_int then raise Overflow else -a
+
+let mul_int (a : int) (b : int) : int =
+  if a = 0 || b = 0 then 0
+  else
+    let r = a * b in
+    if r / b <> a || (a = -1 && b = min_int) || (b = -1 && a = min_int) then
+      raise Overflow
+    else r
+
+(* Division rounding towards minus infinity, for [b > 0] *)
+let floor_div (a : int) (b : int) : int =
+  if a >= 0 then a / b else -((-(a + 1) / b) + 1)
+
+(* The Gregorian calendar repeats every 400 years, which have 146097 days *)
+let days_in_400_years = 146097
+
+(* The number of days from 0000-03-01 to [year-month-day], for small years
+   (H. Hinnant's [days_from_civil]) *)
+let day_number ~(year : int) ~(month : int) ~(day : int) : int =
+  let y = if month <= 2 then year - 1 else year in
+  let era = floor_div y 400 in
+  let yoe = y - (era * 400) in
+  let doy =
+    (((153 * if month > 2 then month - 3 else month + 9) + 2) / 5) + day - 1
+  in
+  let doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy in
+  (era * days_in_400_years) + doe
+
+(* The inverse of [day_number] *)
+let of_day_number (n : int) : int * int * int =
+  let era = floor_div n days_in_400_years in
+  let doe = n - (era * days_in_400_years) in
+  let yoe = (doe - (doe / 1460) + (doe / 36524) - (doe / 146096)) / 365 in
+  let doy = doe - ((365 * yoe) + (yoe / 4) - (yoe / 100)) in
+  let mp = ((5 * doy) + 2) / 153 in
+  let day = doy - (((153 * mp) + 2) / 5) + 1 in
+  let month = if mp < 10 then mp + 3 else mp - 9 in
+  let year = yoe + (era * 400) + if month <= 2 then 1 else 0 in
+  year, month, day
+
+(* [year = cycles * 400 + y0] with [0 <= y0 < 400] *)
+let split_year (year : int) : int * int =
+  let cycles = floor_div year 400 in
+  cycles, year - (cycles * 400)
+
+(** Returns new [year, month]. Precondition: [1 <= month <= 12]
+    @raise [Overflow] *)
+let add_months_to_first_of_month_date
     ~(year : int)
     ~(month : int)
     ~(months : int) : int * int =
-  let new_month = month + months in
-  if 1 <= new_month && new_month <= 12 then year, new_month
-  else if new_month > 12 then
-    add_months_to_first_of_month_date ~year:(year + 1) ~month
-      ~months:(months - 12)
-  else
-    (* new_month <= 0 *)
-    add_months_to_first_of_month_date ~year:(year - 1) ~month
-      ~months:(months + 12)
+  let total = add_int (month - 1) months in
+  let years = floor_div total 12 in
+  add_int year years, total - (years * 12) + 1
 
 (* If the date is valid, does nothing. We expect the month number to be always
    valid when calling this. If the date is invalid due to the day number, then
@@ -148,7 +197,7 @@ let round_date ~(round : date_rounding) (new_date : date) =
     introducing additional imprecision here, and to ensure that adding n years +
     m months is always equivalent to adding (12n + m) months *)
 let add_dates_years ~(round : date_rounding) (d : date) (years : int) : date =
-  { d with year = d.year + years }
+  { d with year = add_int d.year years }
 
 let add_dates_month ~(round : date_rounding) (d : date) (months : int) : date =
   let new_year, new_month =
@@ -157,58 +206,19 @@ let add_dates_month ~(round : date_rounding) (d : date) (months : int) : date =
   let new_date = { d with year = new_year; month = new_month } in
   round_date ~round new_date
 
-let rec add_dates_days (d : date) (days : int) =
-  (* Hello, dear reader! Buckle up because it will be a hard ride. The first
-     thing to do here is to retrieve how many days there are in the current
-     month of [d]. *)
-  let days_in_d_month =
-    days_in_month ~month:d.month ~is_leap_year:(is_leap_year d.year)
+(* In constant time: whole 400-year cycles, then day numbers within a cycle *)
+let add_dates_days (d : date) (days : int) : date =
+  let cycles = floor_div days days_in_400_years in
+  let days = days - (cycles * days_in_400_years) in
+  let base, y0 = split_year d.year in
+  let year, month, day =
+    of_day_number (day_number ~year:y0 ~month:d.month ~day:d.day + days)
   in
-  (* Now, we case analyze of the situation. To do that, we add the current days
-     of the month with [days], and see what happens. Beware, [days] is algebraic
-     and can be negative! *)
-  let new_day = d.day + days in
-  if 1 <= new_day && new_day <= days_in_d_month then
-    (* The first case is the easy one: when you add [days], the new day keeps
-       being a valid day in the current month. All is good, we simply warp to
-       that new date without any further changes. *)
-    { d with day = new_day }
-  else if new_day >= days_in_d_month then
-    (* Now, we deal with the case where there is an overflow : you have added
-       too many days and the current month cannot handle them any more. The
-       strategy here is to fill the current month, and let the next month handle
-       the situation via a recursive call. *)
-    let new_year, new_month =
-      add_months_to_first_of_month_date ~year:d.year ~month:d.month ~months:1
-    in
-    add_dates_days
-      (* We warp to the first day of the next month! *)
-      { year = new_year; month = new_month; day = 1 }
-      (* Now we compute how many days we still have left to add. Because we have
-         warped to the next month, we already have added the rest of the days in
-         the current month: [days_in_d_month - d.day]. But then we switch
-         months, and that corresponds to adding another day. *)
-      (days - (days_in_d_month - d.day) - 1)
-  else
-    (* The last case is symmetrical, we substracted too many days and the
-       current month can't handle it. So we warp to the previous month and let a
-       recursive call handle the situation from there. *)
-    let new_year, new_month =
-      add_months_to_first_of_month_date ~year:d.year ~month:d.month ~months:(-1)
-    in
-    add_dates_days
-      (* We warp to the last day of the previous month. *)
-      {
-        year = new_year;
-        month = new_month;
-        day =
-          days_in_month ~month:new_month ~is_leap_year:(is_leap_year new_year);
-      }
-      (* What remains to be substracted (as [days] is negative) has to be
-         diminished by the number of days of the date in the current month. *)
-      (days + d.day)
+  let year = add_int (add_int (mul_int base 400) year) (mul_int cycles 400) in
+  { year; month; day }
 
-(** @raise [AmbiguousComputation] *)
+(** @raise [AmbiguousComputation]
+    @raise [Overflow] *)
 let add_dates ?(round : date_rounding = AbortOnRound) (d : date) (p : period) :
     date =
   let d = add_dates_years ~round d p.years in
@@ -248,39 +258,18 @@ let last_day_of_month (d : date) : date =
 let neg_period (p : period) : period =
   { years = -p.years; months = -p.months; days = -p.days }
 
-(** The returned [period] is always expressed as a number of days. *)
-let rec sub_dates (d1 : date) (d2 : date) : period =
-  if d1.year = d2.year && d1.month = d2.month then
-    (* Easy case: the two dates are in the same month. *)
-    make_period ~years:0 ~months:0 ~days:(d1.day - d2.day)
-  else
-    (* Otherwise we'll add a month forward if d2 is after d1.*)
-    let cmp = compare_dates d1 d2 in
-    if cmp < 0 then
-      (* The case were d1 is after d2 is symmetrical so we handle it via a
-         recursive call changing the order of the arguments. *)
-      neg_period (sub_dates d2 d1)
-    else
-      (* we know cmp != 0 so cmp > 0*)
-      (* We warp d2 to the first day of the next month. *)
-      let new_d2_year, new_d2_month =
-        add_months_to_first_of_month_date ~year:d2.year ~month:d2.month
-          ~months:1
-      in
-      let new_d2 = { year = new_d2_year; month = new_d2_month; day = 1 } in
-      (* Next we divide the result between the number of days we've added to go
-         to the end of the month, and the remaining handled by a recursive
-         call. *)
-      add_periods
-        (make_period ~years:0 ~months:0
-           ~days:
-             (* The number of days is the difference between the last day of the
-                month and the current day of d1, plus one day because we go to
-                the next month. *)
-             (days_in_month ~month:d2.month ~is_leap_year:(is_leap_year d2.year)
-             - d2.day
-             + 1))
-        (sub_dates d1 new_d2)
+(** The returned [period] is always expressed as a number of days, computed in
+    constant time.
+    @raise [Overflow] *)
+let sub_dates (d1 : date) (d2 : date) : period =
+  let c1, y1 = split_year d1.year in
+  let c2, y2 = split_year d2.year in
+  let days =
+    day_number ~year:y1 ~month:d1.month ~day:d1.day
+    - day_number ~year:y2 ~month:d2.month ~day:d2.day
+  in
+  make_period ~years:0 ~months:0
+    ~days:(add_int (mul_int (add_int c1 (neg_int c2)) days_in_400_years) days)
 
 let date_to_ymd (d : date) : int * int * int = d.year, d.month, d.day
 let period_to_ymds (p : period) : int * int * int = p.years, p.months, p.days

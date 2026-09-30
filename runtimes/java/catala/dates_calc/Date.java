@@ -129,18 +129,38 @@ public class Date implements Comparable<Date> {
 
     }
 
+    // The Gregorian calendar repeats every 400 years, which have 146097 days
+    private static final long DAYS_IN_400_YEARS = 146097;
+
+    // The number of days from 0000-03-01 to year-month-day, for small years
+    // (H. Hinnant's days_from_civil)
+    private static long dayNumber(long year, int month, int day) {
+        long y = month <= 2 ? year - 1 : year;
+        long era = Math.floorDiv(y, 400L);
+        long yoe = y - era * 400;
+        long doy = (153L * (month > 2 ? month - 3 : month + 9) + 2) / 5 + day - 1;
+        long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        return era * DAYS_IN_400_YEARS + doe;
+    }
+
+    // The inverse of dayNumber: {year, month, day}
+    private static long[] ofDayNumber(long n) {
+        long era = Math.floorDiv(n, DAYS_IN_400_YEARS);
+        long doe = n - era * DAYS_IN_400_YEARS;
+        long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        long mp = (5 * doy + 2) / 153;
+        long day = doy - (153 * mp + 2) / 5 + 1;
+        long month = mp < 10 ? mp + 3 : mp - 9;
+        return new long[]{yoe + era * 400 + (month <= 2 ? 1 : 0), month, day};
+    }
+
+    // In constant time; a year beyond int raises ArithmeticException
     private int[] addMonthsToFirstOfMonthDate(int year, int month, int plusMonths) {
         assert (month >= 1 && month <= 12);
-
-        int newMonth = month + plusMonths;
-        if (newMonth >= 1 && newMonth <= 12) {
-            return new int[]{year, newMonth};
-        } else if (newMonth > 12) {
-            return addMonthsToFirstOfMonthDate(year + 1, month, plusMonths - 12);
-        } else {
-            // newMonth <= 0
-            return addMonthsToFirstOfMonthDate(year - 1, month, plusMonths + 12);
-        }
+        long total = (long) month - 1 + plusMonths;
+        long years = Math.floorDiv(total, 12L);
+        return new int[]{Math.toIntExact(year + years), (int) (total - years * 12) + 1};
     }
 
     private Date nextValidDate() {
@@ -162,7 +182,7 @@ public class Date implements Comparable<Date> {
      adding (12n + m) months
      */
     private Date addYears(int years) {
-        return new Date(this.year + years, this.month, this.day);
+        return new Date(Math.addExact(this.year, years), this.month, this.day);
     }
 
     private Date addMonths(int months, Rounding rounding) {
@@ -170,33 +190,13 @@ public class Date implements Comparable<Date> {
         return new Date(newYearAndMonth[0], newYearAndMonth[1], this.day).round(rounding);
     }
 
+    // In constant time: whole 400-year cycles, then day numbers within a cycle
     private Date addDays(int days) {
-        int daysInThisMonth = daysInMonth(this.month, isLeapYear(this.year));
-        // note that 'days' is algebraic and may be negative
-        int newDay = this.day + days;
-        if (newDay >= 1 && newDay <= daysInThisMonth) {
-            return of(this.year, this.month, newDay);
-        } else if (newDay >= daysInThisMonth) {
-            int[] newYearAndMonth = addMonthsToFirstOfMonthDate(this.year, this.month, 1);
-            /* We warp to the first day of the next month!
-            Now we compute how many days we still have left to add. Because we have
-            warped to the next month, we already have added the rest of the days in
-            the current month: [days_in_d_month - d.day]. But then we switch
-            months, and that corresponds to adding another day.
-             */
-            return of(newYearAndMonth[0], newYearAndMonth[1], 1).addDays(days - (daysInThisMonth - this.day) - 1);
-        } else {
-            /* We warp to the first day of the next month!
-            Now we compute how many days we still have left to add. Because we have
-            warped to the next month, we already have added the rest of the days in
-            the current month: [days_in_d_month - d.day]. But then we switch
-            months, and that corresponds to adding another day.
-             */
-            int[] newYearAndMonth = addMonthsToFirstOfMonthDate(this.year, this.month, -1);
-            return of(newYearAndMonth[0],
-                    newYearAndMonth[1],
-                    daysInMonth(newYearAndMonth[1], isLeapYear(newYearAndMonth[0]))).addDays(days + this.day);
-        }
+        long cycles = Math.floorDiv((long) days, DAYS_IN_400_YEARS);
+        long rest = days - cycles * DAYS_IN_400_YEARS;
+        long base = Math.floorDiv((long) this.year, 400L);
+        long[] r = ofDayNumber(dayNumber(this.year - base * 400, this.month, this.day) + rest);
+        return of(Math.toIntExact(base * 400 + r[0] + cycles * 400), (int) r[1], (int) r[2]);
     }
 
     public final Date add(Period p, Rounding rounding){
@@ -210,20 +210,14 @@ public class Date implements Comparable<Date> {
         return this.add(p, Rounding.ABORT_ON_ROUND);
     }
 
+    // In constant time; a number of days beyond int raises ArithmeticException
     public final Period sub(Date d){
-        if(this.year == d.year && this.month == d.month){
-          return new Period(0, 0, this.day - d.day);
-        } else {
-            if(this.compareTo(d) < 0){
-              return d.sub(this).negate();
-            }
-            //at this point, we know that this >= d
-            int[] newYearAndMonthD = addMonthsToFirstOfMonthDate(d.year, d.month, 1);
-            Date newD = of(newYearAndMonthD[0], newYearAndMonthD[1], 1);
-            return new Period(0, 0, daysInMonth(d.month, isLeapYear(d.year)) - d.day + 1)
-              .add(this.sub(newD));
-
-        }
+        long c1 = Math.floorDiv((long) this.year, 400L);
+        long c2 = Math.floorDiv((long) d.year, 400L);
+        long days = (c1 - c2) * DAYS_IN_400_YEARS
+            + dayNumber(this.year - c1 * 400, this.month, this.day)
+            - dayNumber(d.year - c2 * 400, d.month, d.day);
+        return new Period(0, 0, Math.toIntExact(days));
     }
 
     @Override

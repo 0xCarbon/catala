@@ -1745,17 +1745,21 @@ module Oper = struct
   let o_add_mon_mon m1 m2 = Z.add m1 m2
 
   let o_add_dat_dur r pos da du =
-    try Dates_calc.add_dates ~round:r da du
-    with Dates_calc.AmbiguousComputation ->
+    try Dates_calc.add_dates ~round:r da du with
+    | Dates_calc.AmbiguousComputation ->
       error
         (DateError "ambiguous date computation with no rounding mode specified")
         [pos]
+    | Dates_calc.Overflow -> error IntegerOverflow [pos]
 
   let o_add_dur_dur pos d1 d2 = checked_period pos Z.add d1 d2
   let o_sub_int_int i1 i2 = Z.sub i1 i2
   let o_sub_rat_rat i1 i2 = Q.sub i1 i2
   let o_sub_mon_mon m1 m2 = Z.sub m1 m2
-  let o_sub_dat_dat = Dates_calc.sub_dates
+
+  let o_sub_dat_dat pos d1 d2 =
+    try Dates_calc.sub_dates d1 d2
+    with Dates_calc.Overflow -> error IntegerOverflow [pos]
 
   let o_sub_dat_dur r pos dat dur =
     o_add_dat_dur r pos dat (o_minus_dur pos dur)

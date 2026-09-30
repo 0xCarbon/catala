@@ -85,6 +85,55 @@ val error_message : error -> string
 exception Error of error * code_location list * string option
 exception Empty
 
+(** {1 JSON input} *)
+
+(** A JSON document as read from its text (RFC 8259). Numbers keep their
+    literal, so that integers, decimals and money are decoded exactly, without
+    going through a binary float. *)
+module ParsedJson : sig
+  type t =
+    | Null
+    | Bool of bool
+    | Number of string  (** The number literal, as written *)
+    | String of string
+    | Array of t list
+    | Object of (string * t) list  (** Keys are unique, in document order *)
+
+  exception Syntax_error of int * string
+  (** Byte offset and description of the error *)
+
+  val of_string : string -> t
+  (** Strict parser: no comments, no [NaN] or [Infinity], no trailing commas, no
+      duplicate keys, valid UTF-8 strings. Raises [Syntax_error]. *)
+
+  val to_string : t -> string
+  (** Compact printing; number literals are printed as read *)
+
+  val max_exponent : int
+  (** Largest decimal exponent accepted in a number (10^6) *)
+
+  val number_to_decimal : string -> decimal
+  (** The exact value of a JSON number literal. Raises [Invalid_argument] if it
+      is not one or if its exponent is beyond [max_exponent]. *)
+
+  (** {2 Catala numbers from JSON}
+
+      The forms accepted in JSON inputs, also described by their JSON schema. *)
+
+  val is_number_literal : string -> bool
+
+  val integer_of_number : string -> integer option
+  (** A number literal with an integral value, as JSON schema validators check
+      "integer": [3], [3.0], [1e3], but not [1.5] *)
+
+  val integer_of_string : string -> integer option
+  (** A string of decimal digits, with an optional minus sign *)
+
+  val decimal_of_string : string -> decimal option
+  (** A string holding a JSON number literal, or a fraction [n/d] of decimal
+      integers with a non-zero denominator *)
+end
+
 (** {1 Value Embedding} *)
 
 (** {2 Runtime type encoding} *)

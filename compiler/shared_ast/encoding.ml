@@ -42,91 +42,151 @@ let unit_encoding : Val.t encoding =
     (fun () -> Val.V (Unit, ()))
     empty
 
-let try_option f =
-  try Some (f ()) with
-  | (Sys.Break | Assert_failure _ | Match_failure _) as e -> raise e
-  | _ -> None
+(* JSON documents are read with {!Runtime.ParsedJson}, which keeps the literal of
+   every number: integers, decimals and money are decoded from that literal,
+   exactly, instead of from the binary float that [Json_encoding]'s generic
+   view of a number provides. *)
+module Exact_repr : Json_repr.Repr with type value = Runtime.ParsedJson.t =
+struct
+  type value = Runtime.ParsedJson.t
+
+  let view : value -> value Json_repr.view = function
+    | Null -> `Null
+    | Bool b -> `Bool b
+    | Number n -> `Float (float_of_string n)
+    | String s -> `String s
+    | Array l -> `A l
+    | Object l -> `O l
+
+  let repr : value Json_repr.view -> value = function
+    | `Null -> Null
+    | `Bool b -> Bool b
+    | `Float f -> Number (Printf.sprintf "%.17g" f)
+    | `String s -> String s
+    | `A l -> Array l
+    | `O l -> Object l
+
+  let repr_uid = Json_repr.repr_uid ()
+end
+
+module Exact_encoding = Json_encoding.Make (Exact_repr)
+
+let json_kind : Runtime.ParsedJson.t -> string = function
+  | Null -> "null"
+  | Bool _ -> "boolean"
+  | Number _ -> "number"
+  | String _ -> "string"
+  | Array _ -> "array"
+  | Object _ -> "object"
+
+(* Patterns of the numeric strings, as read by [Runtime.ParsedJson] *)
+let number_pattern = "-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?"
+let integer_pattern = "^-?[0-9]+$"
+let money_pattern = "^" ^ number_pattern ^ "$"
+let decimal_pattern = "^" ^ number_pattern ^ "$|^-?[0-9]+/[0-9]*[1-9][0-9]*$"
+
+(** A Catala number read from a JSON number or a numeric string, both given by
+    their text, strictly as the schema describes them. *)
+let exact_numeric_encoding
+    ~(number : Json_schema.element_kind list)
+    ~(pattern : string)
+    ~(expected : string)
+    ~(write : Val.t -> Runtime.ParsedJson.t)
+    ~(of_number : string -> Val.t option)
+    ~(of_string : string -> Val.t option) : Val.t encoding =
+  let schema =
+    Json_schema.(
+      create
+        (element
+           (Combine
+              ( One_of,
+                List.map element number
+                @ [
+                    element (String { string_specs with pattern = Some pattern });
+                  ] ))))
+  in
+  let unexpected got =
+    raise
+      (Json_encoding.Cannot_destruct
+         ([], Json_encoding.Unexpected (got, expected)))
+  in
+  Exact_encoding.custom write
+    (function
+      | Number n -> (
+        match of_number n with
+        | Some v -> v
+        | None -> unexpected (Printf.sprintf "number %s" n))
+      | String s -> (
+        match of_string s with
+        | Some v -> v
+        | None -> unexpected (Printf.sprintf "string %S" s))
+      | j -> unexpected (json_kind j))
+    ~schema
 
 let int_encoding : Val.t encoding =
   def "integer" ~title:"Catala Integer"
-  @@ union
-       [
-         case int53
-           (function
-             | Val.V (Integer, z) -> try_option (fun () -> Z.to_int64 z)
-             | v ->
-               Message.error ~internal:true
-                 "Unexpected runtime value %a instead of int while encoding to \
-                  JSON"
-                 Val.format v)
-           (fun i -> Val.V (Integer, Z.of_int64 i));
-         case string
-           (function
-             | Val.V (Integer, z) -> Some (Z.to_string z) | _ -> assert false)
-           (fun s ->
-             try Val.V (Integer, Z.of_string s)
-             with _ ->
-               raise (Json_encoding.Unexpected ("string", "numeric string")));
-       ]
+  @@ exact_numeric_encoding
+       ~number:Json_schema.[Integer numeric_specs]
+       ~pattern:integer_pattern
+       ~expected:"an integer (integral number or string of digits)"
+       ~write:(function
+         | Val.V (Integer, z) -> String (Z.to_string z)
+         | v ->
+           Message.error ~internal:true
+             "Unexpected runtime value %a instead of int while encoding to JSON"
+             Val.format v)
+       ~of_number:(fun n ->
+         Option.map
+           (fun z -> Val.V (Integer, z))
+           (Runtime.ParsedJson.integer_of_number n))
+       ~of_string:(fun s ->
+         Option.map
+           (fun z -> Val.V (Integer, z))
+           (Runtime.ParsedJson.integer_of_string s))
 
 let money_encoding : Val.t encoding =
   def "money" ~title:"Catala Money"
   @@
-  let z_100 = Z.of_int 100 in
   let q_100 = Q.of_int 100 in
-  union
-    [
-      case int53
-        (function
-          | Val.V (Money, z) when Z.rem z z_100 = Z.zero ->
-            try_option (fun () -> Z.(div z z_100 |> to_int64))
-          | Val.V (Money, _) -> None
-          | v ->
-            Message.error ~internal:true
-              "Unexpected runtime value %a instead of money while encoding to \
-               JSON"
-              Val.format v)
-        (fun i -> Val.V (Money, Z.(mul (of_int64 i) z_100)));
-      case float
-        (function
-          | Val.V (Money, z) -> try_option (fun () -> Z.to_float z /. 100.)
-          | _ -> assert false)
-        (fun i -> Val.V (Money, Z.of_float (i *. 100.)));
-      case string
-        (function
-          | Val.V (Money, z) ->
-            let z = Q.div (Q.of_bigint z) q_100 in
-            Some (Q.to_string z)
-          | _ -> assert false)
-        (fun s ->
-          try
-            let q = Q.(of_string s |> mul q_100) in
-            Val.V (Money, Q.to_bigint q)
-          with _ ->
-            raise (Json_encoding.Unexpected ("string", "numeric string")));
-    ]
+  (* Amounts are in units; digits beyond the cent are truncated *)
+  let money q = Val.V (Money, Q.to_bigint (Q.mul q q_100)) in
+  exact_numeric_encoding
+    ~number:Json_schema.[Integer numeric_specs; Number numeric_specs]
+    ~pattern:money_pattern ~expected:"an amount (number or numeric string)"
+    ~write:(function
+      | Val.V (Money, z) -> String (Q.to_string (Q.div (Q.of_bigint z) q_100))
+      | v ->
+        Message.error ~internal:true
+          "Unexpected runtime value %a instead of money while encoding to JSON"
+          Val.format v)
+    ~of_number:(fun n ->
+      Option.map money (Runtime.ParsedJson.decimal_of_string n))
+    ~of_string:(fun s ->
+      if Runtime.ParsedJson.is_number_literal s then
+        Option.map money (Runtime.ParsedJson.decimal_of_string s)
+      else None)
 
 let rat_encoding : Val.t encoding =
   def "decimal" ~title:"Catala Decimal"
-  @@ union
-       [
-         case float
-           (function
-             | Val.V (Decimal, d) -> try_option (fun () -> Q.to_float d)
-             | v ->
-               Message.error ~internal:true
-                 "Unexpected runtime value %a instead of decimal while \
-                  encoding to JSON"
-                 Val.format v)
-           (fun f -> Val.V (Decimal, Q.of_string (string_of_float f)));
-         case int53 (fun _ -> None) (fun f -> Val.V (Decimal, Q.of_int64 f));
-         case string
-           (function Val.V (Decimal, d) -> Some (Q.to_string d) | _ -> None)
-           (fun s ->
-             try Val.V (Decimal, Q.of_string s)
-             with _ ->
-               raise (Json_encoding.Unexpected ("string", "numeric string")));
-       ]
+  @@ exact_numeric_encoding
+       ~number:Json_schema.[Number numeric_specs; Integer numeric_specs]
+       ~pattern:decimal_pattern
+       ~expected:"a decimal (number, numeric string or fraction)"
+       ~write:(function
+         | Val.V (Decimal, d) -> String (Q.to_string d)
+         | v ->
+           Message.error ~internal:true
+             "Unexpected runtime value %a instead of decimal while encoding to \
+              JSON"
+             Val.format v)
+       ~of_number:(fun n ->
+         Option.map
+           (fun q -> Val.V (Decimal, q))
+           (Runtime.ParsedJson.decimal_of_string n))
+       ~of_string:(fun s ->
+         Option.map
+           (fun q -> Val.V (Decimal, q))
+           (Runtime.ParsedJson.decimal_of_string s))
 
 let date_encoding : Val.t encoding =
   let date_obj =
@@ -509,10 +569,13 @@ let scope_output_encoding scope ctx typ =
   let encoding = make_encoding ctx typ in
   def (scope_s ^ "_output") ~title ~description encoding
 
-module Yojson_repr = Json_encoding.Make (Json_repr.Yojson)
-
-let parse_json enc json =
-  try Yojson_repr.destruct enc json
+let parse_json enc text =
+  let json =
+    try Runtime.ParsedJson.of_string text
+    with Runtime.ParsedJson.Syntax_error (offset, msg) ->
+      Message.error "@[<v 2>Failed to parse JSON:@ %s at byte %d@]" msg offset
+  in
+  try Exact_encoding.destruct enc json
   with e ->
     let print_unknown fmt = function
       | Failure msg -> Format.pp_print_string fmt msg

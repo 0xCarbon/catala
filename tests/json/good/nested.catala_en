@@ -96,12 +96,8 @@ $ catala json-schema --scope T
       "integer": {
         "title": "Catala Integer",
         "oneOf": [
-          {
-            "type": "integer",
-            "minimum": -9007199254740992.0,
-            "maximum": 9007199254740992.0
-          },
-          { "type": "string" }
+          { "type": "integer" },
+          { "type": "string", "pattern": "^-?[0-9]+$" }
         ]
       }
     }
@@ -130,12 +126,8 @@ $ catala json-schema --scope T
       "integer": {
         "title": "Catala Integer",
         "oneOf": [
-          {
-            "type": "integer",
-            "minimum": -9007199254740992.0,
-            "maximum": 9007199254740992.0
-          },
-          { "type": "string" }
+          { "type": "integer" },
+          { "type": "string", "pattern": "^-?[0-9]+$" }
         ]
       }
     }

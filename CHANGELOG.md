@@ -1,3 +1,18 @@
+## Changes since 1.3.0
+
+One line per change, be concise and explicit. Document only external changes
+in behavior visible for the end-users of the tooling.
+
+* Fix JSON inputs: numbers given for integers, decimals and money are decoded
+  exactly from their literal instead of through a binary float
+  (`1234567890123` was read as `1234567890120` for a decimal, `0.29` as
+  `$0.28`, integers beyond 2^53 were rounded). Numeric inputs are strict and
+  match their JSON schema, which now gives the patterns of numeric strings:
+  integers are integral numbers or strings of digits (`"0x1F"` and `"1_000"`
+  are refused) and decimal fractions need a non-zero denominator (`"1/0"` was
+  accepted as an infinite decimal). The input is parsed as strict JSON
+  (RFC 8259): comments and `NaN`/`Infinity` are now rejected.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

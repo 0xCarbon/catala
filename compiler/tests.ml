@@ -5,6 +5,80 @@ module Backend_paths = Clerk_backend.Backend_paths
 let check = Alcotest.(check string)
 let check_list = Alcotest.(check (list string))
 
+(* JSON inputs are parsed strictly, keeping the literal of numbers *)
+
+module Json = Catala_runtime.ParsedJson
+
+let json_error text =
+  match Json.of_string text with
+  | _ -> Alcotest.failf "accepted invalid JSON %S" text
+  | exception Json.Syntax_error (offset, msg) ->
+    Printf.sprintf "%s@%d" msg offset
+
+let test_parsed_json_syntax () =
+  List.iter
+    (fun (text, expected) -> check text expected (json_error text))
+    [
+      "[1, 2,]", "unexpected character@6";
+      "{\"a\": 1,}", "expected '\"'@8";
+      "[1] // c", "trailing characters@4";
+      "01", "trailing characters@1";
+      "1.", "invalid number@0";
+      ".5", "unexpected character@0";
+      "NaN", "unexpected character@0";
+      "{\"a\": 1, \"a\": 2}", "duplicate key \"a\"@9";
+      "\"\\ud800\"", "unpaired surrogate@7";
+      "\"a\nb\"", "control character in string@2";
+      "\"\xff\"", "invalid UTF-8 in string@0";
+      "", "unexpected end of input@0";
+    ];
+  check "surrogate pair and escapes" "\"\xf0\x9f\x98\x80/\\n\""
+    (Json.to_string (Json.of_string {|"\ud83d\ude00\/\n"|}));
+  check "numbers keep their literal" {|[-0,1.50,2E+3,{"k":null,"t":true}]|}
+    (Json.to_string
+       (Json.of_string {| [ -0, 1.50 , 2E+3, {"k": null, "t": true} ] |}))
+
+let test_parsed_json_numbers () =
+  List.iter
+    (fun (literal, expected) ->
+      check literal expected (Q.to_string (Json.number_to_decimal literal)))
+    [
+      "1234567890123", "1234567890123";
+      "0.1", "1/10";
+      "-12.34", "-617/50";
+      "1.5e3", "1500";
+      "25E-2", "1/4";
+      "123456789012345678901234567890.5", "246913578024691357802469135781/2";
+    ];
+  let opt f = function None -> "none" | Some x -> f x in
+  List.iter
+    (fun (s, expected) ->
+      check ("integer " ^ s) expected
+        (opt Z.to_string (Json.integer_of_string s)))
+    ["-0012", "-12"; "0x1F", "none"; "1_000", "none"; "+7", "none"; "", "none"];
+  List.iter
+    (fun (n, expected) ->
+      check ("integral number " ^ n) expected
+        (opt Z.to_string (Json.integer_of_number n)))
+    ["3", "3"; "3.0", "3"; "1e3", "1000"; "1.5", "none"; "1e1000001", "none"];
+  List.iter
+    (fun (s, expected) ->
+      check ("decimal " ^ s) expected
+        (opt Q.to_string (Json.decimal_of_string s)))
+    [
+      "-1/3", "-1/3";
+      "0.5", "1/2";
+      "1/0", "none";
+      "0/000", "none";
+      "1/-3", "none";
+      ".5", "none";
+      "1e", "none";
+      "abc", "none";
+    ];
+  Alcotest.check_raises "exponent bound"
+    (Invalid_argument "number_to_decimal: exponent out of range") (fun () ->
+      ignore (Json.number_to_decimal "1e1000001"))
+
 (* Runs [f] with the target OS forced, so Windows behaviour is exercised on the
    Linux CI — where the reftests, running with '/', cannot catch it. Restores
    [Path.win32] afterwards so tests don't leak the setting to one another. *)
@@ -292,5 +366,10 @@ let () =
         [
           test_case "copy operand quotes each file" `Quick
             test_cmd_concat_operand;
+        ] );
+      ( "Strict JSON input with exact numbers",
+        [
+          test_case "syntax" `Quick test_parsed_json_syntax;
+          test_case "exact numbers" `Quick test_parsed_json_numbers;
         ] );
     ]

@@ -620,24 +620,26 @@ module Flags = struct
           "Append the given subdir at the end of the path of each of the files \
            in the returned list. Usually matches the name of the backend used."
 
-  let scope_input : Yojson.Safe.t option Term.t =
+  let scope_input : string option Term.t =
+    (* The JSON text is kept as is: it is parsed against the scope's input type,
+       reading numbers from their literal *)
     let converter =
       conv ~docv:"FILE|JSON"
         ( (fun s ->
             try
-              let json =
-                if s = "-" then Yojson.Safe.from_channel stdin
-                else if Sys.file_exists s && not (Sys.is_directory s) then
-                  let ic = open_in s in
-                  Fun.protect
-                    (fun () -> Yojson.Safe.from_channel ic)
-                    ~finally:(fun () -> close_in ic)
-                else Yojson.Safe.from_string s
-              in
-              Ok json
-            with Yojson.Json_error _ ->
-              Error (`Msg "argument is neither a file nor a valid JSON value.")),
-          fun ppf -> Yojson.Safe.pretty_print ppf )
+              if s = "-" then Ok (In_channel.input_all stdin)
+              else if Sys.file_exists s && not (Sys.is_directory s) then
+                Ok (In_channel.with_open_bin s In_channel.input_all)
+              else
+                (* The text is parsed later, exactly; only check here that it
+                   is not a mistyped file name *)
+                match Yojson.Safe.from_string s with
+                | _ -> Ok s
+                | exception Yojson.Json_error _ ->
+                  Error
+                    (`Msg "argument is neither a file nor a valid JSON value.")
+            with Sys_error msg -> Error (`Msg msg)),
+          Format.pp_print_string )
     in
     value
     & opt (some converter) None

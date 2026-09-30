@@ -1,0 +1,147 @@
+# Numbers outside the forms of the JSON schema
+
+```catala
+declaration scope S:
+  input i content integer
+  input d content decimal
+  input m content money
+  output ri content integer
+
+scope S:
+  definition ri equals i
+```
+
+An integer is a number without fraction or exponent:
+
+```catala-test-cli
+$ catala test-scope S --input {"i":1e3,"d":1,"m":1} --disable-warnings
+┌─[RESULT]─ S ─
+│ ri = 1,000
+└─
+```
+
+or a string of decimal digits:
+
+```catala-test-cli
+$ catala test-scope S --input {"i":"0x1F","d":1,"m":1} --disable-warnings
+┌─[ERROR]─
+│
+│  Failed to validate JSON:
+│    At /i, unexpected string "0x1F" instead of an integer (integral number or string of digits)
+│  
+│  Expected JSON object of the form:
+│    { "i": $integer,
+│      "d": $decimal,
+│      "m": $money }
+│    $decimal:
+│      /* Catala Decimal */
+│      number
+│      || integer
+│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$|^-?[0-9]+/[0-9]*[1-9][0-9]*$/
+│    $integer:
+│      /* Catala Integer */
+│      integer || /^-?[0-9]+$/
+│    $money:
+│      /* Catala Money */
+│      integer
+│      || number
+│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
+│
+└─
+#return code 123#
+```
+
+A fraction needs a non-zero denominator:
+
+```catala-test-cli
+$ catala test-scope S --input {"i":1,"d":"1/0","m":1} --disable-warnings
+┌─[ERROR]─
+│
+│  Failed to validate JSON:
+│    At /d, unexpected string "1/0" instead of a decimal (number, numeric string or fraction)
+│  
+│  Expected JSON object of the form:
+│    { "i": $integer,
+│      "d": $decimal,
+│      "m": $money }
+│    $decimal:
+│      /* Catala Decimal */
+│      number
+│      || integer
+│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$|^-?[0-9]+/[0-9]*[1-9][0-9]*$/
+│    $integer:
+│      /* Catala Integer */
+│      integer || /^-?[0-9]+$/
+│    $money:
+│      /* Catala Money */
+│      integer
+│      || number
+│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
+│
+└─
+#return code 123#
+```
+
+Money is not given as a fraction:
+
+```catala-test-cli
+$ catala test-scope S --input {"i":1,"d":1,"m":"1/3"} --disable-warnings
+┌─[ERROR]─
+│
+│  Failed to validate JSON:
+│    At /m, unexpected string "1/3" instead of an amount (number or numeric string)
+│  
+│  Expected JSON object of the form:
+│    { "i": $integer,
+│      "d": $decimal,
+│      "m": $money }
+│    $decimal:
+│      /* Catala Decimal */
+│      number
+│      || integer
+│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$|^-?[0-9]+/[0-9]*[1-9][0-9]*$/
+│    $integer:
+│      /* Catala Integer */
+│      integer || /^-?[0-9]+$/
+│    $money:
+│      /* Catala Money */
+│      integer
+│      || number
+│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
+│
+└─
+#return code 123#
+```
+
+Strict JSON: no comments, no NaN:
+
+```catala-test-cli
+$ catala test-scope S --input {"i":1/*c*/,"d":1,"m":1} --disable-warnings
+┌─[ERROR]─
+│
+│  Failed to parse JSON:
+│    expected ',' or '}' at byte 6
+│
+└─
+#return code 123#
+```
+
+```catala-test-cli
+$ catala test-scope S --input {"i":1,"d":NaN,"m":1} --disable-warnings
+┌─[ERROR]─
+│
+│  Failed to parse JSON:
+│    unexpected character at byte 11
+│
+└─
+#return code 123#
+```
+
+Neither a file nor JSON:
+
+```catala-test-cli
+$ catala test-scope S --input no_such_file.json --disable-warnings
+Usage: [01mcatala interpret[m [[01m--help[m] [[04mOPTION[m]… [04mFILE[m
+catala: option [01m--input[m: argument is neither a file nor a valid JSON value.
+#return code 124#
+```

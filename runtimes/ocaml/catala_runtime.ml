@@ -358,6 +358,323 @@ module Print = struct
     Format.pp_print_char ppf ']'
 end
 
+(* -- JSON input -- *)
+
+module ParsedJson = struct
+  type t =
+    | Null
+    | Bool of bool
+    | Number of string
+    | String of string
+    | Array of t list
+    | Object of (string * t) list
+
+  exception Syntax_error of int * string
+
+  let is_digit = function '0' .. '9' -> true | _ -> false
+
+  (* End of the JSON number literal (RFC 8259) starting at [i] in [s], or [-1]
+     if there is none *)
+  let number_end (s : string) (i : int) : int =
+    let len = String.length s in
+    let digits i =
+      let j = ref i in
+      while !j < len && is_digit s.[!j] do
+        incr j
+      done;
+      if !j = i then -1 else !j
+    in
+    let i = if i < len && s.[i] = '-' then i + 1 else i in
+    let i =
+      if i < len && s.[i] = '0' then i + 1
+      else if i < len && s.[i] >= '1' && s.[i] <= '9' then digits i
+      else -1
+    in
+    let i = if i >= 0 && i < len && s.[i] = '.' then digits (i + 1) else i in
+    if i >= 0 && i < len && (s.[i] = 'e' || s.[i] = 'E') then
+      let j = i + 1 in
+      let j = if j < len && (s.[j] = '+' || s.[j] = '-') then j + 1 else j in
+      digits j
+    else i
+
+  let of_string (s : string) : t =
+    let len = String.length s in
+    let pos = ref 0 in
+    let fail msg = raise (Syntax_error (!pos, msg)) in
+    let peek () = if !pos < len then Some s.[!pos] else None in
+    let skip_ws () =
+      while
+        match peek () with
+        | Some (' ' | '\t' | '\n' | '\r') -> true
+        | _ -> false
+      do
+        incr pos
+      done
+    in
+    let expect c =
+      if peek () = Some c then incr pos
+      else fail (Printf.sprintf "expected '%c'" c)
+    in
+    let keyword w v =
+      let n = String.length w in
+      if !pos + n <= len && String.sub s !pos n = w then (
+        pos := !pos + n;
+        v)
+      else fail "invalid literal"
+    in
+    let hex4 () =
+      let hex = function
+        | '0' .. '9' as c -> Char.code c - Char.code '0'
+        | 'a' .. 'f' as c -> Char.code c - Char.code 'a' + 10
+        | 'A' .. 'F' as c -> Char.code c - Char.code 'A' + 10
+        | _ -> fail "invalid unicode escape"
+      in
+      if !pos + 4 > len then fail "invalid unicode escape";
+      let n = ref 0 in
+      for k = 0 to 3 do
+        n := (!n * 16) + hex s.[!pos + k]
+      done;
+      pos := !pos + 4;
+      !n
+    in
+    let string_lit () =
+      let start = !pos in
+      expect '"';
+      let buf = Buffer.create 16 in
+      let closed = ref false in
+      while not !closed do
+        match peek () with
+        | None -> fail "unterminated string"
+        | Some '"' ->
+          incr pos;
+          closed := true
+        | Some '\\' -> (
+          incr pos;
+          let c = peek () in
+          incr pos;
+          match c with
+          | Some '"' -> Buffer.add_char buf '"'
+          | Some '\\' -> Buffer.add_char buf '\\'
+          | Some '/' -> Buffer.add_char buf '/'
+          | Some 'b' -> Buffer.add_char buf '\b'
+          | Some 'f' -> Buffer.add_char buf '\012'
+          | Some 'n' -> Buffer.add_char buf '\n'
+          | Some 'r' -> Buffer.add_char buf '\r'
+          | Some 't' -> Buffer.add_char buf '\t'
+          | Some 'u' ->
+            let u = hex4 () in
+            let u =
+              if u >= 0xD800 && u <= 0xDBFF then (
+                if not (!pos + 2 <= len && s.[!pos] = '\\' && s.[!pos + 1] = 'u')
+                then fail "unpaired surrogate";
+                pos := !pos + 2;
+                let lo = hex4 () in
+                if lo < 0xDC00 || lo > 0xDFFF then fail "unpaired surrogate";
+                0x10000 + ((u - 0xD800) lsl 10) + (lo - 0xDC00))
+              else if u >= 0xDC00 && u <= 0xDFFF then fail "unpaired surrogate"
+              else u
+            in
+            Buffer.add_utf_8_uchar buf (Uchar.of_int u)
+          | _ -> fail "invalid escape")
+        | Some '\000' .. '\031' -> fail "control character in string"
+        | Some c ->
+          Buffer.add_char buf c;
+          incr pos
+      done;
+      let str = Buffer.contents buf in
+      if not (String.is_valid_utf_8 str) then (
+        pos := start;
+        fail "invalid UTF-8 in string");
+      str
+    in
+    let rec value () =
+      skip_ws ();
+      match peek () with
+      | Some '{' ->
+        incr pos;
+        skip_ws ();
+        if peek () = Some '}' then (
+          incr pos;
+          Object [])
+        else
+          let keys = Hashtbl.create 8 in
+          let rec members acc =
+            skip_ws ();
+            let key_pos = !pos in
+            let key = string_lit () in
+            if Hashtbl.mem keys key then (
+              pos := key_pos;
+              fail (Printf.sprintf "duplicate key %S" key));
+            Hashtbl.add keys key ();
+            skip_ws ();
+            expect ':';
+            let v = value () in
+            let acc = (key, v) :: acc in
+            skip_ws ();
+            match peek () with
+            | Some ',' ->
+              incr pos;
+              members acc
+            | Some '}' ->
+              incr pos;
+              Object (List.rev acc)
+            | _ -> fail "expected ',' or '}'"
+          in
+          members []
+      | Some '[' ->
+        incr pos;
+        skip_ws ();
+        if peek () = Some ']' then (
+          incr pos;
+          Array [])
+        else
+          let rec elements acc =
+            let acc = value () :: acc in
+            skip_ws ();
+            match peek () with
+            | Some ',' ->
+              incr pos;
+              elements acc
+            | Some ']' ->
+              incr pos;
+              Array (List.rev acc)
+            | _ -> fail "expected ',' or ']'"
+          in
+          elements []
+      | Some '"' -> String (string_lit ())
+      | Some 't' -> keyword "true" (Bool true)
+      | Some 'f' -> keyword "false" (Bool false)
+      | Some 'n' -> keyword "null" Null
+      | Some ('-' | '0' .. '9') ->
+        let e = number_end s !pos in
+        if e < 0 then fail "invalid number";
+        let n = String.sub s !pos (e - !pos) in
+        pos := e;
+        Number n
+      | Some _ -> fail "unexpected character"
+      | None -> fail "unexpected end of input"
+    in
+    let v = value () in
+    skip_ws ();
+    if !pos <> len then fail "trailing characters";
+    v
+
+  let quote buf str =
+    Buffer.add_char buf '"';
+    String.iter
+      (function
+        | ('"' | '\\') as c ->
+          Buffer.add_char buf '\\';
+          Buffer.add_char buf c
+        | '\n' -> Buffer.add_string buf "\\n"
+        | '\t' -> Buffer.add_string buf "\\t"
+        | '\r' -> Buffer.add_string buf "\\r"
+        | '\x00' .. '\x1F' as c -> Printf.bprintf buf "\\u%04x" (int_of_char c)
+        | c -> Buffer.add_char buf c)
+      str;
+    Buffer.add_char buf '"'
+
+  let to_string (v : t) : string =
+    let buf = Buffer.create 64 in
+    let rec aux = function
+      | Null -> Buffer.add_string buf "null"
+      | Bool b -> Buffer.add_string buf (string_of_bool b)
+      | Number n -> Buffer.add_string buf n
+      | String s -> quote buf s
+      | Array l ->
+        Buffer.add_char buf '[';
+        List.iteri
+          (fun i v ->
+            if i > 0 then Buffer.add_char buf ',';
+            aux v)
+          l;
+        Buffer.add_char buf ']'
+      | Object l ->
+        Buffer.add_char buf '{';
+        List.iteri
+          (fun i (k, v) ->
+            if i > 0 then Buffer.add_char buf ',';
+            quote buf k;
+            Buffer.add_char buf ':';
+            aux v)
+          l;
+        Buffer.add_char buf '}'
+    in
+    aux v;
+    Buffer.contents buf
+
+  (* Largest decimal exponent accepted in a number: bounds the size of the exact
+     value (10^1000000 has about 3.3 million bits) *)
+  let max_exponent = 1_000_000
+
+  let is_number_literal (s : string) =
+    s <> "" && number_end s 0 = String.length s
+
+  (* The exact value of a valid number literal, [None] if its exponent is out of
+     bounds *)
+  let decimal_of_literal (n : string) : Q.t option =
+    let mantissa, exponent =
+      match String.index_opt n 'e', String.index_opt n 'E' with
+      | Some i, _ | None, Some i ->
+        ( String.sub n 0 i,
+          int_of_string_opt (String.sub n (i + 1) (String.length n - i - 1)) )
+      | None, None -> n, Some 0
+    in
+    match exponent with
+    | Some e when abs e <= max_exponent ->
+      let digits, scale =
+        match String.index_opt mantissa '.' with
+        | None -> mantissa, e
+        | Some i ->
+          ( String.sub mantissa 0 i
+            ^ String.sub mantissa (i + 1) (String.length mantissa - i - 1),
+            e - (String.length mantissa - i - 1) )
+      in
+      let m = Z.of_string digits in
+      Some
+        (if scale >= 0 then Q.of_bigint (Z.mul m (Z.pow z10 scale))
+         else Q.make m (Z.pow z10 (-scale)))
+    | _ -> None
+
+  let number_to_decimal (n : string) : Q.t =
+    if not (is_number_literal n) then invalid_arg "number_to_decimal";
+    match decimal_of_literal n with
+    | Some q -> q
+    | None -> invalid_arg "number_to_decimal: exponent out of range"
+
+  (* [-?[0-9]+] *)
+  let is_integer_string (s : string) =
+    let len = String.length s in
+    let start = if len > 0 && s.[0] = '-' then 1 else 0 in
+    len > start && String.for_all is_digit (String.sub s start (len - start))
+
+  let integer_of_number (n : string) : integer option =
+    if not (is_number_literal n) then None
+    else
+      match decimal_of_literal n with
+      | Some q when Z.equal (Q.den q) Z.one -> Some (Q.num q)
+      | _ -> None
+
+  let integer_of_string (s : string) : integer option =
+    if is_integer_string s then Some (Z.of_string s) else None
+
+  let decimal_of_string (s : string) : decimal option =
+    if is_number_literal s then decimal_of_literal s
+    else
+      match String.index_opt s '/' with
+      | Some i ->
+        let num = String.sub s 0 i in
+        let den = String.sub s (i + 1) (String.length s - i - 1) in
+        if
+          is_integer_string num
+          && den <> ""
+          && String.for_all is_digit den
+          && not (String.for_all (( = ) '0') den)
+        then Some (Q.make (Z.of_string num) (Z.of_string den))
+        else None
+      | None -> None
+end
+
 (* -- Runtime types and embedding -- *)
 
 module Value = struct

@@ -29,10 +29,12 @@ $ catala test-scope S --input {"x":1,"y":true,"s":{}}
 │    $Str: { "x": $integer }
 │    $integer:
 │      /* Catala Integer */
-│      integer ∈ [-2^53, 2^53] || string
+│      integer || /^-?[0-9]+$/
 │    $money:
 │      /* Catala Money */
-│      integer ∈ [-2^53, 2^53] || number || string
+│      integer
+│      || number
+│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
 │
 └─
 #return code 123#
@@ -53,10 +55,12 @@ $ catala test-scope S --input {"x":1,"y":true,"s":{"x":1}}
 │    $Str: { "x": $integer }
 │    $integer:
 │      /* Catala Integer */
-│      integer ∈ [-2^53, 2^53] || string
+│      integer || /^-?[0-9]+$/
 │    $money:
 │      /* Catala Money */
-│      integer ∈ [-2^53, 2^53] || number || string
+│      integer
+│      || number
+│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
 │
 └─
 #return code 123#
@@ -67,9 +71,7 @@ $ catala test-scope S --input {"x":"bla","y":true,"z":300,"s":{"x":1}}
 ┌─[ERROR]─
 │
 │  Failed to validate JSON:
-│    At /x, no case matched:
-│      Unexpected string instead of number
-│      Unexpected string instead of numeric string
+│    At /x, unexpected string "bla" instead of an integer (integral number or string of digits)
 │  
 │  Expected JSON object of the form:
 │    { "s": $Str,
@@ -79,10 +81,38 @@ $ catala test-scope S --input {"x":"bla","y":true,"z":300,"s":{"x":1}}
 │    $Str: { "x": $integer }
 │    $integer:
 │      /* Catala Integer */
-│      integer ∈ [-2^53, 2^53] || string
+│      integer || /^-?[0-9]+$/
 │    $money:
 │      /* Catala Money */
-│      integer ∈ [-2^53, 2^53] || number || string
+│      integer
+│      || number
+│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
+│
+└─
+#return code 123#
+```
+
+```catala-test-cli
+$ catala test-scope S --input {"x":1.5,"y":true,"z":300,"s":{"x":1}}
+┌─[ERROR]─
+│
+│  Failed to validate JSON:
+│    At /x, unexpected number 1.5 instead of an integer (integral number or string of digits)
+│  
+│  Expected JSON object of the form:
+│    { "s": $Str,
+│      "x": $integer,
+│      "y": boolean,
+│      "z": $money }
+│    $Str: { "x": $integer }
+│    $integer:
+│      /* Catala Integer */
+│      integer || /^-?[0-9]+$/
+│    $money:
+│      /* Catala Money */
+│      integer
+│      || number
+│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
 │
 └─
 #return code 123#

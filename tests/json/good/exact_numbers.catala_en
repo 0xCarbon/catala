@@ -1,0 +1,60 @@
+# Exact decoding of JSON numbers
+
+JSON numbers given for integers, decimals and money are read from their
+literal text, never through a binary float.
+
+```catala-metadata
+declaration scope S:
+  input i content integer
+  input d content decimal
+  input m content money
+
+  output ri content integer
+  output rd content decimal
+  output rm content money
+
+scope S:
+  definition ri equals i
+  definition rd equals d
+  definition rm equals m
+```
+
+Beyond 2^53 and 12 significant digits:
+
+```catala-test-cli
+$ catala test-scope S --input {"i":9007199254740993,"d":1234567890123,"m":12.34} -F json
+{"ri":"9007199254740993","rd":"1234567890123","rm":"12.34"}
+```
+
+Decimal fractions that have no exact binary representation:
+
+```catala-test-cli
+$ catala test-scope S --input {"i":0,"d":0.1,"m":0.29} -F json
+{"ri":"0","rd":"1/10","rm":"0.29"}
+```
+
+```catala-test-cli
+$ catala test-scope S --input {"i":-12,"d":-123456789.0123456789,"m":-12.34} -F json
+{"ri":"-12","rd":"-1234567890123456789/10000000000","rm":"-12.34"}
+```
+
+Exponent notation:
+
+```catala-test-cli
+$ catala test-scope S --input {"i":1e3,"d":1.5E-3,"m":1.2e+3} -F json
+{"ri":"1000","rd":"3/2000","rm":"1200.00"}
+```
+
+Integral values beyond the 63-bit native integers:
+
+```catala-test-cli
+$ catala test-scope S --input {"i":123456789012345678901234567890,"d":123456789012345678901234567890,"m":10000000000000000} -F json
+{"ri":"123456789012345678901234567890","rd":"123456789012345678901234567890","rm":"10000000000000000.00"}
+```
+
+Numeric strings:
+
+```catala-test-cli
+$ catala test-scope S --input {"i":"-0012","d":"-1/3","m":"1.5e2"} -F json
+{"ri":"-12","rd":"-1/3","rm":"150.00"}
+```

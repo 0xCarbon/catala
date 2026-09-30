@@ -1,0 +1,49 @@
+# Integers beyond machine integers in the standard library
+
+Indexes and decimal positions beyond 64 bits are out of range: they must not be
+truncated to a small machine integer, and rounding does not compute powers of
+ten larger than needed.
+
+```catala
+#[test]
+declaration scope LargeIntegers:
+  output nth content optional of integer
+  output removed content list of integer
+  output money_coarse content money
+  output money_fine content money
+  output decimal_exact content decimal
+  output decimal_coarse content decimal
+  output decimal_half content decimal
+
+scope LargeIntegers:
+  definition nth equals List.nth_element of [7; 8; 9], 18446744073709551617
+  definition removed equals
+    List.remove_nth_element of [7; 8; 9], 18446744073709551617
+  definition money_coarse equals
+    Money.round_to_decimal of $123.45, -18446744073709551616
+  definition money_fine equals
+    Money.round_to_decimal of $123.45, 18446744073709551616
+  definition decimal_exact equals
+    Decimal.round_to_decimal of 0.125, 18446744073709551616
+  definition decimal_coarse equals
+    Decimal.round_to_decimal of 123.45, -18446744073709551616
+  definition decimal_half equals
+    Decimal.round_to_decimal of 0.125, 2
+```
+
+```catala-test-cli
+$ catala test-scope LargeIntegers
+┌─[RESULT]─ LargeIntegers ─
+│ nth = Absent
+│ removed = [
+│             7;
+│             8;
+│             9;
+│           ]
+│ money_coarse = $0.00
+│ money_fine = $123.45
+│ decimal_exact = 0.125
+│ decimal_coarse = 0.0
+│ decimal_half = 0.13
+└─
+```

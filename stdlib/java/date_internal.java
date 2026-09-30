@@ -14,11 +14,10 @@ public class Date_internal {
                     CatalaInteger dmonth = CatalaValue.<CatalaInteger>cast(tup_arg.get(2));
                     CatalaInteger dday = CatalaValue.<CatalaInteger>cast(tup_arg.get(3));
                     try {
-                        /* We'd like to catch overflows here but the bigint docs say that this will truncate without pointing to a way to detect errors */
-                        return CatalaDate.of(dyear.asBigInteger().intValue(),
-                                dmonth.asBigInteger().intValue(),
-                                dday.asBigInteger().intValue());
-                    } catch (IllegalArgumentException e) {
+                        return CatalaDate.of(dyear.asBigInteger().intValueExact(),
+                                dmonth.asBigInteger().intValueExact(),
+                                dday.asBigInteger().intValueExact());
+                    } catch (IllegalArgumentException | ArithmeticException e) {
                         throw CatalaError.error(CatalaError.Error.DateError, pos);
                     }
                 };

@@ -209,8 +209,9 @@ let month_number_of_date (d : date) : integer =
   Z.of_int m
 
 let is_leap_year (y : integer) =
-  let y = Z.to_int y in
-  Dates_calc.is_leap_year y
+  (* On the integer itself: a year may not fit a machine integer *)
+  let divides n = Z.equal (Z.erem y (Z.of_int n)) Z.zero in
+  divides 4 && ((not (divides 100)) || divides 400)
 
 let day_of_month_of_date (d : date) : integer =
   let _, _, d = Dates_calc.date_to_ymd d in

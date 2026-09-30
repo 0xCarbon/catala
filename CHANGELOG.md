@@ -47,6 +47,13 @@ in behavior visible for the end-users of the tooling.
   `IntegerOverflow` instead of wrapping silently
   (`4611686018427387903 day + 1 day` was negative).
 
+* Fix the standard library on integers beyond machine integers, in every
+  runtime: `List.nth_element` and `List.remove_nth_element` treat them as out
+  of range (C and Java truncated them), `Money.round_to_decimal` and
+  `Decimal.round_to_decimal` round without computing powers of ten larger than
+  the value (they hung or crashed), `Date.of_year_month_day` reports an invalid
+  date, and `List.sequence` raises `IntegerOverflow`.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

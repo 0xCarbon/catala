@@ -17,6 +17,8 @@ const CATALA_ARRAY(CATALA_INT) ListInternal__sequence
   catala_array* ret = catala_malloc(sizeof(catala_array));
   mpz_init (zlen);
   mpz_sub (zlen, end, begin);
+  if (mpz_sgn (zlen) > 0 && !mpz_fits_ulong_p (zlen))
+    catala_error(catala_integer_overflow, NULL, 0, NULL);
   len = mpz_sgn (zlen) > 0 ? mpz_get_ui (zlen) : 0;
   mpz_clear (zlen);
   ret->size = len;
@@ -33,7 +35,9 @@ const CATALA_ARRAY(CATALA_INT) ListInternal__sequence
 const CATALA_OPTION(void * /* any t */) ListInternal__nth_element
     (const CATALA_ARRAY(void * /* any t */) lst, CATALA_INT index)
 {
-  int n = mpz_get_si (index) - 1;
+  long int n;
+  if (!mpz_fits_slong_p (index)) return CATALA_NONE;
+  n = mpz_get_si (index) - 1;
   if (0 <= n && n < lst->size)
     return catala_some(lst->elements[n]);
   else
@@ -43,7 +47,9 @@ const CATALA_OPTION(void * /* any t */) ListInternal__nth_element
 const CATALA_ARRAY(void * /* any t */) ListInternal__remove_nth_element
     (const CATALA_ARRAY(void * /* any t */) lst, CATALA_INT index)
 {
-  int n = mpz_get_si (index) - 1;
+  long int n;
+  if (!mpz_fits_slong_p (index)) return lst;
+  n = mpz_get_si (index) - 1;
   if (0 <= n && n < lst->size) {
     int i;
     size_t len = lst->size;

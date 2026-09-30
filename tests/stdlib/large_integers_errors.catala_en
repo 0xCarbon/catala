@@ -1,0 +1,39 @@
+# Standard library errors on integers beyond what can be computed
+
+```catala
+declaration scope Errors:
+  input case content integer
+  output d content decimal
+  output l content list of integer
+
+scope Errors:
+  definition d equals
+    if case = 1 then Decimal.round_to_decimal of (1.0 / 3.0), 1000001
+    else 0.0
+  definition l equals
+    if case = 2 then List.sequence of 0, 18446744073709551616 else []
+```
+
+A decimal without a finite expansion, rounded beyond 10^1000000:
+
+```catala-test-cli
+$ catala test-scope Errors --input {"case":1} --disable-warnings
+┌─[ERROR]─
+│
+│  During evaluation: an integer is too large for this computation.
+│
+└─
+#return code 123#
+```
+
+A list longer than a machine integer:
+
+```catala-test-cli
+$ catala test-scope Errors --input {"case":2} --disable-warnings
+┌─[ERROR]─
+│
+│  During evaluation: an integer is too large for this computation.
+│
+└─
+#return code 123#
+```

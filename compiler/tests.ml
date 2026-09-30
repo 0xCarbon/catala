@@ -566,6 +566,13 @@ let test_duration_product () =
     (overflows (fun () ->
          R.Oper.o_mult_dur_int pos (days 1) (Z.pow (Z.of_int 10) 30)))
 
+let test_leap_year_of_large_integers () =
+  let big = Z.pow (Z.of_int 10) 30 in
+  Alcotest.(check (list bool))
+    "leap years beyond machine integers" [true; true; false; true]
+    (List.map R.is_leap_year
+       [big; Z.add big (Z.of_int 4); Z.add big (Z.of_int 100); Z.of_int 2000])
+
 let () =
   let open Alcotest in
   run "Unit tests"
@@ -582,6 +589,8 @@ let () =
           test_case "product" `Quick test_duration_product;
           test_case "sum, difference, negation" `Quick test_duration_sum;
         ] );
+      ( "Large integers",
+        [test_case "leap years" `Quick test_leap_year_of_large_integers] );
       ( "Iota-reduction",
         [
           test_case "#1" `Quick Shared_ast.Optimizations.test_iota_reduction_1;

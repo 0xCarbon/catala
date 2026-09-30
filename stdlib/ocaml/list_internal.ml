@@ -5,26 +5,31 @@ let sequence : integer -> integer -> integer array =
  fun start stop ->
   let len = Z.sub stop start in
   if Z.sign len <> 1 then [||]
+  else if not (Z.fits_int len) then raise (Error (IntegerOverflow, [], None))
   else Array.init (Z.to_int len) (fun i -> Z.add start (Z.of_int i))
 
 (* Toplevel def element *)
 let nth_element : 't array -> integer -> 't Optional.t =
  fun arr n ->
-  let n = Z.to_int n - 1 in
-  if 0 <= n && n < Array.length arr then Optional.Present arr.(n)
-  else Optional.Absent
+  if not (Z.fits_int n) then Optional.Absent
+  else
+    let n = Z.to_int n - 1 in
+    if 0 <= n && n < Array.length arr then Optional.Present arr.(n)
+    else Optional.Absent
 
 (* Toplevel def remove_nth_element *)
 let remove_nth_element : 't array -> integer -> 't array =
  fun arr n ->
-  let n = Z.to_int n - 1 in
-  let len = Array.length arr in
-  if n < 0 || len <= n then arr
+  if not (Z.fits_int n) then arr
   else
-    let ret = Array.make (Array.length arr - 1) arr.(0) in
-    if n > 0 then Array.blit arr 0 ret 0 n;
-    if n < len - 1 then Array.blit arr (n + 1) ret n (len - n - 1);
-    ret
+    let n = Z.to_int n - 1 in
+    let len = Array.length arr in
+    if n < 0 || len <= n then arr
+    else
+      let ret = Array.make (Array.length arr - 1) arr.(0) in
+      if n > 0 then Array.blit arr 0 ret 0 n;
+      if n < len - 1 then Array.blit arr (n + 1) ret n (len - n - 1);
+      ret
 
 (* Toplevel def reverse *)
 let reverse : 't array -> 't array =

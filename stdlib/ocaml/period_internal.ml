@@ -34,8 +34,8 @@ let first_day_of_rolling_year date start_month =
 (* Toplevel def split_by_year *)
 let split_by_year : integer -> date * date -> (date * date) array =
  fun start_month (start, stop) ->
+  assert (Z.geq start_month Z.one && Z.leq start_month (Z.of_int 12));
   let start_month = integer_to_int start_month in
-  assert (1 <= start_month && start_month <= 12);
   let rec split start =
     let next =
       Dates.add_dates (first_day_of_rolling_year start start_month) one_year

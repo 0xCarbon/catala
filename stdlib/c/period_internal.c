@@ -162,7 +162,7 @@ PeriodInternal__split_by_year(CATALA_INT start_month, const CATALA_TUPLE(CATALA_
   char should_continue;
   int idx;
 
-  assert(mpz_get_si(start_month) >= 1 && mpz_get_si(start_month) <= 12);
+  assert(mpz_cmp_si(start_month, 1) >= 0 && mpz_cmp_si(start_month, 12) <= 0);
 
   ret = catala_malloc(sizeof(catala_array));
 

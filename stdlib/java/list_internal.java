@@ -1,6 +1,8 @@
 package catala.stdlib;
 
 import catala.runtime.*;
+import catala.runtime.exception.CatalaError;
+import java.math.BigInteger;
 import java.util.Arrays;
 
 public class List_internal {
@@ -11,7 +13,11 @@ public class List_internal {
                 = tup_arg -> {
                     CatalaInteger begin = CatalaValue.<CatalaInteger>cast(tup_arg.get(0));
                     CatalaInteger end = CatalaValue.<CatalaInteger>cast(tup_arg.get(1));
-                    int len = end.subtract(begin).asBigInteger().intValue();
+                    BigInteger bigLen = end.subtract(begin).asBigInteger();
+                    if (bigLen.signum() > 0 && bigLen.bitLength() > 31) {
+                        throw CatalaError.error(CatalaError.Error.IntegerOverflow);
+                    }
+                    int len = bigLen.intValue();
                     CatalaInteger[] values = new CatalaInteger[len > 0 ? len : 0];
                     for (int i = 0; i < len; i++) {
                         values[i] = begin.add(new CatalaInteger(i));
@@ -22,7 +28,11 @@ public class List_internal {
         public static final CatalaFunction<CatalaTuple, CatalaOption<CatalaValue<?>>> nthElement
                 = tup_arg -> {
                     CatalaArray<CatalaValue<?>> lst = CatalaValue.<CatalaArray<CatalaValue<?>>>cast(tup_arg.get(0));
-                    int n = CatalaValue.<CatalaInteger>cast(tup_arg.get(1)).asBigInteger().intValue() - 1;
+                    BigInteger index = CatalaValue.<CatalaInteger>cast(tup_arg.get(1)).asBigInteger();
+                    if (index.bitLength() > 31) {
+                        return CatalaOption.none();
+                    }
+                    int n = index.intValue() - 1;
                     if (0 <= n && n < lst.length().asBigInteger().intValue()) {
                         return CatalaOption.some(lst.get(n));
                     } else {
@@ -33,7 +43,11 @@ public class List_internal {
         public static final CatalaFunction<CatalaTuple, CatalaArray<? extends CatalaValue<?>>> removeNthElement
                 = tup_arg -> {
                     CatalaArray<CatalaValue<?>> lst = CatalaValue.<CatalaArray<CatalaValue<?>>>cast(tup_arg.get(0));
-                    int n = CatalaValue.<CatalaInteger>cast(tup_arg.get(1)).asBigInteger().intValue() - 1;
+                    BigInteger index = CatalaValue.<CatalaInteger>cast(tup_arg.get(1)).asBigInteger();
+                    if (index.bitLength() > 31) {
+                        return lst;
+                    }
+                    int n = index.intValue() - 1;
                     int len = lst.length().asBigInteger().intValue();
                     if (0 <= n && n < len) {
                         CatalaValue<?>[] values = new CatalaValue[len - 1];

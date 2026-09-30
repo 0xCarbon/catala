@@ -3,17 +3,25 @@ open Catala_runtime
 (* Toplevel def of_ymd *)
 let of_ymd : code_location -> integer -> integer -> integer -> date =
  fun pos y m d ->
-  try
-    Dates_calc.make_date ~year:(Z.to_int y) ~month:(Z.to_int m)
-      ~day:(Z.to_int d)
-  with Dates_calc.InvalidDate ->
+  let invalid () =
+    let pad n z =
+      if Z.fits_int z then Printf.sprintf "%0*d" n (Z.to_int z)
+      else Z.to_string z
+    in
     raise
       (Error
          ( DateError
-             (Printf.sprintf "|%04d-%02d-%02d| is not a valid date" (Z.to_int y)
-                (Z.to_int m) (Z.to_int d)),
+             (Printf.sprintf "|%s-%s-%s| is not a valid date" (pad 4 y)
+                (pad 2 m) (pad 2 d)),
            [pos],
            None ))
+  in
+  if not (Z.fits_int y && Z.fits_int m && Z.fits_int d) then invalid ()
+  else
+    try
+      Dates_calc.make_date ~year:(Z.to_int y) ~month:(Z.to_int m)
+        ~day:(Z.to_int d)
+    with Dates_calc.InvalidDate -> invalid ()
 
 (* Toplevel def to_ymd *)
 let to_ymd : date -> integer * integer * integer =

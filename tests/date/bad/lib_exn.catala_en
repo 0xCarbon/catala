@@ -21,3 +21,25 @@ $ catala test-scope S
 └─
 #return code 123#
 ```
+
+```catala
+declaration scope Huge:
+  output a content date
+
+scope Huge:
+  definition a equals Date.of_year_month_day of (18446744073709551617, 2, 1)
+```
+
+```catala-test-cli
+$ catala test-scope Huge
+┌─[ERROR]─
+│
+│  During evaluation: |18446744073709551617-02-01| is not a valid date.
+│
+├─➤ tests/date/bad/lib_exn.catala_en:30.23-45:
+│    │
+│ 30 │   definition a equals Date.of_year_month_day of (18446744073709551617, 2, 1)
+│    │                       ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+└─
+#return code 123#
+```

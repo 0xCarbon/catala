@@ -53,6 +53,7 @@ type error =
   | UncomparableValues
   | DateError of string
   | Impossible
+  | IntegerOverflow
 
 let error_to_string = function
   | AssertionFailed -> "AssertionFailed"
@@ -64,6 +65,7 @@ let error_to_string = function
   | UncomparableValues -> "UncomparableValues"
   | DateError s -> Printf.sprintf "DateError(%S)" s
   | Impossible -> "Impossible"
+  | IntegerOverflow -> "IntegerOverflow"
 
 let error_message = function
   | AssertionFailed -> "an assertion doesn't hold"
@@ -78,6 +80,7 @@ let error_message = function
   | UncomparableValues -> "attempting to compare values with uncomparable types"
   | DateError s -> s
   | Impossible -> "\"impossible\" computation reached"
+  | IntegerOverflow -> "an integer is too large for this computation"
 
 exception Error of error * code_location list * string option
 exception Empty
@@ -1748,7 +1751,18 @@ module Oper = struct
     round rat_result
 
   let o_mult_mon_int i1 i2 = o_mult_mon_rat i1 (decimal_of_integer i2)
-  let o_mult_dur_int d m = Dates_calc.mul_period d (Z.to_int m)
+
+  let o_mult_dur_int pos d m =
+    (* The components of durations are machine integers *)
+    let y, mo, da = Dates_calc.period_to_ymds d in
+    let mul c =
+      let r = Z.mul (Z.of_int c) m in
+      if Z.fits_int r then Z.to_int r else error IntegerOverflow [pos]
+    in
+    let years = mul y in
+    let months = mul mo in
+    let days = mul da in
+    Dates_calc.make_period ~years ~months ~days
 
   let o_div_int_int pos i1 i2 =
     (* It's not on the ocamldoc, but Q.div likely already raises this ? *)

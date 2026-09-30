@@ -67,7 +67,20 @@ public final class CatalaDuration extends CatalaValue<CatalaDuration> {
 
     // Mult_dur_int
     public final CatalaDuration multiply(CatalaInteger other) {
-        return new CatalaDuration(this.period.mul(other.asBigInteger().intValue()));
+        // The components of durations are ints: intValue() would silently truncate
+        java.math.BigInteger m = other.asBigInteger();
+        return new CatalaDuration(new Period(
+                mulComponent(this.getYears(), m),
+                mulComponent(this.getMonths(), m),
+                mulComponent(this.getDays(), m)));
+    }
+
+    private static int mulComponent(int c, java.math.BigInteger m) {
+        java.math.BigInteger r = m.multiply(java.math.BigInteger.valueOf(c));
+        if (r.bitLength() > 31) {
+            throw CatalaError.error(CatalaError.Error.IntegerOverflow);
+        }
+        return r.intValue();
     }
 
     public final CatalaDecimal divide(CatalaDuration other) {

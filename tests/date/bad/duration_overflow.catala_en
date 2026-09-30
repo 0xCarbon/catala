@@ -1,0 +1,46 @@
+# Durations of more units than machine integers hold
+
+The components of a duration are machine integers: multiplying a duration by
+an integer beyond them is a runtime error, not a wrapped or truncated result.
+
+```catala
+declaration scope Overflow:
+  input n content integer
+  output d content duration
+
+scope Overflow:
+  definition d equals 2 day * n
+```
+
+```catala-test-cli
+$ catala test-scope Overflow --input {"n":"4611686018427387903"}
+┌─[ERROR]─
+│
+│  During evaluation: an integer is too large for this computation.
+│
+├─➤ tests/date/bad/duration_overflow.catala_en:12.29-30:
+│    │
+│ 12 │   definition d equals 2 day * n
+│    │                             ‾
+└─ Durations of more units than machine integers hold
+#return code 123#
+```
+
+```catala-test-cli
+$ catala test-scope Overflow --input {"n":"-100000000000000000000000000000"}
+┌─[ERROR]─
+│
+│  During evaluation: an integer is too large for this computation.
+│
+├─➤ tests/date/bad/duration_overflow.catala_en:12.29-30:
+│    │
+│ 12 │   definition d equals 2 day * n
+│    │                             ‾
+└─ Durations of more units than machine integers hold
+#return code 123#
+```
+
+```catala-test-cli
+$ catala test-scope Overflow --input {"n":"1000"} -F json
+{"d":{"years":0,"months":0,"days":2000}}
+```

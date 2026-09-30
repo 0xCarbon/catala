@@ -520,6 +520,30 @@ let test_from_json_errors () =
        "Value.from_json: dynamically typed values cannot be read from JSON")
     (fun () -> ignore (from_json (V.Array V.Dynamic) "[1]"))
 
+(* Durations have machine-integer components: arithmetic on them raises
+   IntegerOverflow instead of wrapping *)
+
+let days n = R.duration_of_numbers 0 0 n
+
+let overflows f =
+  match f () with
+  | _ -> false
+  | exception R.Error (R.IntegerOverflow, [_], None) -> true
+
+let test_duration_product () =
+  let half = Z.of_int (max_int / 2) in
+  Alcotest.(check bool)
+    "largest product" true
+    (R.duration_to_years_months_days (R.Oper.o_mult_dur_int pos (days 2) half)
+    = (0, 0, 2 * (max_int / 2)));
+  Alcotest.(check bool)
+    "product beyond max_int" true
+    (overflows (fun () -> R.Oper.o_mult_dur_int pos (days 2) (Z.succ half)));
+  Alcotest.(check bool)
+    "integer beyond 64 bits" true
+    (overflows (fun () ->
+         R.Oper.o_mult_dur_int pos (days 1) (Z.pow (Z.of_int 10) 30)))
+
 let () =
   let open Alcotest in
   run "Unit tests"
@@ -531,6 +555,8 @@ let () =
           test_case "optional values" `Quick test_from_json_optional;
           test_case "errors" `Quick test_from_json_errors;
         ] );
+      ( "Duration arithmetic overflow",
+        [test_case "product" `Quick test_duration_product] );
       ( "Iota-reduction",
         [
           test_case "#1" `Quick Shared_ast.Optimizations.test_iota_reduction_1;

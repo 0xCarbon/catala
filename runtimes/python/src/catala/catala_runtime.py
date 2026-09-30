@@ -218,6 +218,11 @@ class Impossible(CatalaError):
     name = __name__
     message = '"impossible" computation reached'
 
+class IntegerOverflow(CatalaError):
+    # Python integers are unbounded; kept for parity with the other runtimes
+    name = __name__
+    message = "an integer is too large for this computation"
+
 
 # =============================
 # Types and value introspection

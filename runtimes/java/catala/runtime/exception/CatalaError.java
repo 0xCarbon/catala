@@ -20,6 +20,7 @@ public class CatalaError extends RuntimeException {
         UncomparableValues,
         DateError,
         Impossible,
+        IntegerOverflow,
         GenericError,
         NotImplemented;
 
@@ -44,6 +45,8 @@ public class CatalaError extends RuntimeException {
                     return "date error";
                 case Impossible:
                     return "\"impossible\" computation reached";
+                case IntegerOverflow:
+                    return "an integer is too large for this computation";
                 case GenericError:
                     return "Generic error";
                 case NotImplemented:

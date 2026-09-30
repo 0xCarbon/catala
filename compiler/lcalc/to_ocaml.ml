@@ -76,7 +76,7 @@ let format_lit (fmt : Format.formatter) (l : lit Mark.pos) : unit =
 let op_needs_pos (type a) (op : a Op.t) ty =
   match op with
   | Div_int_int | Div_rat_rat | Div_mon_mon | Div_mon_int | Div_mon_rat
-  | Div_dur_dur | Add_dat_dur _ | Sub_dat_dur _ | Sort _ | Map2
+  | Div_dur_dur | Mult_dur_int | Add_dat_dur _ | Sub_dat_dur _ | Sort _ | Map2
   | ValueFromJson _ ->
     true
   | Eq -> (

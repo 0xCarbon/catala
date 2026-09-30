@@ -1347,11 +1347,33 @@ CATALA_MONEY o_mult_mon_rat (CATALA_MONEY x1, CATALA_DEC x2)
   return ret;
 }
 
-CATALA_DURATION o_mult_dur_int (CATALA_DURATION x1, CATALA_INT x2)
+/* Each component of the product must fit a long int, like the components of
+   durations: mpz_get_si would silently truncate */
+static long int mul_period_component (const catala_code_position* pos,
+                                      long int c, CATALA_INT m)
 {
-  const signed long int mult = mpz_get_si(x2);
+  long int ret;
+  mpz_t r;
+  mpz_init(r);
+  mpz_mul_si(r, m, c);
+  if (!mpz_fits_slong_p(r)) {
+    mpz_clear(r);
+    catala_error(catala_integer_overflow, pos, 1, NULL);
+  }
+  ret = mpz_get_si(r);
+  mpz_clear(r);
+  return ret;
+}
+
+CATALA_DURATION o_mult_dur_int (const catala_code_position* pos,
+                                CATALA_DURATION x1,
+                                CATALA_INT x2)
+{
   dc_period *ret = catala_malloc(sizeof(dc_period));
-  dc_mul_periods(ret, x1, mult);
+  dc_make_period(ret,
+                 mul_period_component(pos, dc_period_years(x1), x2),
+                 mul_period_component(pos, dc_period_months(x1), x2),
+                 mul_period_component(pos, dc_period_days(x1), x2));
   return ret;
 }
 
@@ -1734,6 +1756,9 @@ void* catala_do(void* (*f)(void))
       break;
     case catala_impossible:
       error_kind = "\"impossible\" computation reached";
+      break;
+    case catala_integer_overflow:
+      error_kind = "An integer is too large for this computation";
       break;
     case catala_malloc_error:
       error_kind = "Out of memory";

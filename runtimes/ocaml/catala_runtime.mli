@@ -75,6 +75,11 @@ type error =
   | UncomparableValues  (** Equality check or comparison on functions *)
   | DateError of string  (** Errors related to date and duration computations *)
   | Impossible  (** The "impossible" keyword was reached *)
+  | IntegerOverflow
+      (** An integer is too large for the computation, e.g. as a number of days:
+          durations have machine-integer components (63-bit natively, 32-bit
+          under js_of_ocaml; [long] in the C runtime, [int] in the Java runtime,
+          unbounded in the Python runtime) *)
 
 val error_to_string : error -> string
 (** Returns the capitalized tag of the error as a string *)
@@ -547,7 +552,10 @@ module Oper : sig
   val o_mult_rat_rat : decimal -> decimal -> decimal
   val o_mult_mon_int : money -> integer -> money
   val o_mult_mon_rat : money -> decimal -> money
-  val o_mult_dur_int : duration -> integer -> duration
+
+  val o_mult_dur_int : code_location -> duration -> integer -> duration
+  (** @raise Runtime.IntegerOverflow *)
+
   val o_div_int_int : code_location -> integer -> integer -> decimal
   val o_div_rat_rat : code_location -> decimal -> decimal -> decimal
   val o_div_mon_mon : code_location -> money -> money -> decimal

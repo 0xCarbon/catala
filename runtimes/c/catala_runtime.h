@@ -34,6 +34,7 @@ typedef enum catala_error_code
   catala_uncomparable_values,
   catala_date_error,
   catala_impossible,
+  catala_integer_overflow,
   catala_malloc_error
 } catala_error_code;
 
@@ -365,7 +366,9 @@ CATALA_MONEY o_mult_mon_int (CATALA_MONEY x1, CATALA_INT x2);
 
 CATALA_MONEY o_mult_mon_rat (CATALA_MONEY x1, CATALA_DEC x2);
 
-CATALA_DURATION o_mult_dur_int (CATALA_DURATION x1, CATALA_INT x2);
+CATALA_DURATION o_mult_dur_int (const catala_code_position* pos,
+                                CATALA_DURATION x1,
+                                CATALA_INT x2);
 
 CATALA_DEC o_div_int_int (const catala_code_position* pos,
                           CATALA_INT x1,

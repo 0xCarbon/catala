@@ -182,6 +182,44 @@ champ d'application Test:
   assertContains(result.output, '€', 'Should format money with euro');
 });
 
+// Under js_of_ocaml, machine integers are 32-bit: the components of durations
+// are checked against that limit.
+test('Duration product within 32-bit machine integers', () => {
+  const code = `
+\`\`\`catala
+declaration scope Test:
+  output result content duration
+
+scope Test:
+  definition result equals 2 day * 1073741823
+\`\`\`
+`;
+  const result = exports.interpret({
+    files: { 'test.catala_en': code },
+    scope: 'Test'
+  });
+  assertEquals(result.success, true, 'Should succeed');
+  assertContains(result.output, '2147483646 days', 'Should not wrap');
+});
+
+test('Duration product beyond 32-bit machine integers is IntegerOverflow', () => {
+  const code = `
+\`\`\`catala
+declaration scope Test:
+  output result content duration
+
+scope Test:
+  definition result equals 2 day * 1073741824
+\`\`\`
+`;
+  const result = exports.interpret({
+    files: { 'test.catala_en': code },
+    scope: 'Test'
+  });
+  assertEquals(result.success, false, 'Should fail');
+  assertContains(getErrorText(result), 'an integer is too large for this computation', 'Should report IntegerOverflow');
+});
+
 test('Syntax error gives position', () => {
   const code = `
 \`\`\`catala

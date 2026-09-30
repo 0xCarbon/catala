@@ -35,6 +35,14 @@ in behavior visible for the end-users of the tooling.
   Catala module named like an OCaml standard module (e.g. `Bool`, `String`),
   once compiled, made the OCaml backend fail with `Unbound value Bool.equal`.
 
+* Fix duration multiplication: `duration * integer` raises the new runtime
+  error `IntegerOverflow` when a component of the product does not fit a
+  machine integer, on every backend. It wrapped or truncated silently
+  (`2 day * 4611686018427387903` was `-2 days`) and crashed the interpreter
+  with an uncaught `Z.Overflow` beyond 63 bits. Components are machine
+  integers: 63-bit natively in OCaml, 32-bit under js_of_ocaml and in Java,
+  `long` in C; Python integers are unbounded.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

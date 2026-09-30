@@ -68,6 +68,10 @@ in behavior visible for the end-users of the tooling.
   (`$1,2,3`, `$12,34`, `1 2 3 €`) are rejected with the expected form instead
   of being read with the separators ignored.
 
+* Fix the lexer: a multi-word keyword whose last word runs into an identifier
+  is lexed as its first word followed by that identifier (`x and then_y`,
+  `x ou bien_y` were syntax errors).
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

@@ -1,0 +1,23 @@
+# Multi-word keywords followed by an identifier
+
+A multi-word keyword whose last word runs into an identifier is not that
+keyword: `and then_what` is `and` followed by the identifier `then_what`.
+
+```catala
+#[test]
+declaration scope T:
+  output r content boolean
+
+scope T:
+  definition r equals
+    let then_what equals true in
+    let if_list_empty_flag equals false in
+    (true and then_what) or if_list_empty_flag
+```
+
+```catala-test-cli
+$ catala test-scope T
+┌─[RESULT]─ T ─
+│ r = true
+└─
+```

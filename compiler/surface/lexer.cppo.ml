@@ -466,6 +466,17 @@ let money_amount lexbuf =
   L.update_acc lexbuf;
   MONEY_AMOUNT (sign, Buffer.contents units, Buffer.contents cents)
 
+(** Lexes the first word of the current input as a keyword or an identifier *)
+let lex_first_word (lexbuf : lexbuf) : token =
+  match%sedlex lexbuf with
+  | lowercase, Star idchar -> (
+    L.update_acc lexbuf;
+    let word = Utf8.lexeme lexbuf in
+    match List.assoc_opt word token_list with
+    | Some token -> token
+    | None -> LIDENT word)
+  | _ -> assert false
+
 (** Main lexing function used in code blocks *)
 let rec lex_code (lexbuf : lexbuf) : token =
   let prev_lexeme = Utf8.lexeme lexbuf in
@@ -842,6 +853,17 @@ let rec lex_code (lexbuf : lexbuf) : token =
       (* Name of variable *)
       L.update_acc lexbuf;
       LIDENT (Utf8.lexeme lexbuf)
+  | ( MR_SCOPE | MR_DEPENDS | MR_DECREASING | MR_INCREASING | MR_LIST
+      | MR_OPTION | MR_DEFINED_AS | MR_WILDCARD | MR_WITH | MR_UNDER_CONDITION
+      | MR_WITH_V | MR_WE_HAVE | MR_MAP_EACH | MR_TO | MR_SUCH
+      | MR_ORDER_ASCENDING | MR_ORDER_DESCENDING | MR_AND_THEN | MR_XOR
+      | MR_OR_IF_LIST_EMPTY | MR_BUT_REPLACE ), idchar ->
+      (* A multi-word keyword whose last word runs into an identifier (e.g.
+         [x and then_y]) is not that keyword: lex its first word alone. For
+         single-word keywords, the identifier rule above matches as long and
+         takes precedence. *)
+      rollback lexbuf;
+      lex_first_word lexbuf
   | Opt '-', Plus digit ->
       (* Integer literal*)
       L.update_acc lexbuf;

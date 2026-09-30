@@ -1,0 +1,24 @@
+# Mots-clés de plusieurs mots suivis d'un identifiant
+
+Un mot-clé de plusieurs mots dont le dernier mot se prolonge en identifiant
+n'est pas ce mot-clé : `ou bien_sur` est `ou` suivi de l'identifiant
+`bien_sur`.
+
+```catala
+#[test]
+déclaration champ d'application T:
+  résultat r contenu booléen
+
+champ d'application T:
+  définition r égal à
+    soit bien_sur égal à vrai dans
+    soit si_liste_vide égal à faux dans
+    (faux ou bien_sur) et non si_liste_vide
+```
+
+```catala-test-cli
+$ catala test-scope T
+┌─[RESULT]─ T ─
+│ r = vrai
+└─
+```

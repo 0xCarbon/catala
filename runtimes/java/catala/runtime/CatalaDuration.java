@@ -176,30 +176,10 @@ public final class CatalaDuration extends CatalaValue<CatalaDuration> {
 
     @Override
     public String toJSONString() {
-        if (this.isZero()) {
-            return "{}";
-        }
-        StringBuilder b = new StringBuilder();
-        b.append("{ ");
-        boolean pred = false;
-        if (this.period.years > 0) {
-            b.append("\"years\":").append(this.period.years);
-            pred = true;
-        }
-        if (this.period.months > 0) {
-            if (pred) {
-                b.append(", ");
-            }
-            pred = true;
-            b.append("\"months\":").append(this.period.months);
-        }
-        if (this.period.days > 0) {
-            if (pred) {
-                b.append(", ");
-            }
-            b.append("\"days\":").append(this.period.days);
-        }
-        b.append(" }");
-        return b.toString();
+        // Every component, negative ones included, as an exact integer
+        // string like integers
+        return "{\"years\":\"" + this.period.years
+            + "\",\"months\":\"" + this.period.months
+            + "\",\"days\":\"" + this.period.days + "\"}";
     }
 }

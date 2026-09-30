@@ -42,7 +42,7 @@ $ catala test-scope Overflow --input {"n":"-100000000000000000000000000000"}
 
 ```catala-test-cli
 $ catala test-scope Overflow --input {"n":"1000"} -F json
-{"d":{"years":0,"months":0,"days":2000}}
+{"d":{"years":"0","months":"0","days":"2000"}}
 ```
 
 Sums, differences and negations of durations are checked the same way:

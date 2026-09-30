@@ -520,6 +520,31 @@ let test_from_json_errors () =
        "Value.from_json: dynamically typed values cannot be read from JSON")
     (fun () -> ignore (from_json (V.Array V.Dynamic) "[1]"))
 
+(* Duration components are integers in JSON, held as machine integers *)
+let test_from_json_duration () =
+  let ymd d =
+    let y, m, d = R.duration_to_years_months_days d in
+    [y; m; d]
+  in
+  Alcotest.(check (list int))
+    "components beyond 2^30, as numbers and strings" [1; -2; 1073741824]
+    (ymd
+       (from_json V.Duration
+          {|{"years": "1", "months": -2, "days": 1073741824}|}));
+  Alcotest.(check string)
+    "written as strings of digits, every component"
+    {|{"years":"0","months":"0","days":"-2"}|}
+    (R.Json.runtime_value (V.embed V.Duration (R.duration_of_numbers 0 0 (-2))));
+  Alcotest.(check bool)
+    "a component beyond a machine integer is IntegerOverflow" true
+    (match from_json V.Duration {|{"days": "99999999999999999999"}|} with
+    | _ -> false
+    | exception R.Error (R.IntegerOverflow, _, _) -> true);
+  Alcotest.(check string)
+    "a non-integral component"
+    "at /days, expected an integer, got the number 1.5"
+    (invalid V.Duration {|{"days": 1.5}|})
+
 (* Durations have machine-integer components: arithmetic on them raises
    IntegerOverflow instead of wrapping *)
 
@@ -583,6 +608,7 @@ let () =
             test_from_json_struct;
           test_case "optional values" `Quick test_from_json_optional;
           test_case "errors" `Quick test_from_json_errors;
+          test_case "durations" `Quick test_from_json_duration;
         ] );
       ( "Duration arithmetic overflow",
         [

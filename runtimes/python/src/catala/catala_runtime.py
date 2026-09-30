@@ -763,7 +763,8 @@ class Duration(Value):
         return f"Duration({self.value.__repr__()})"
 
     def to_json(self) -> str:
-        return '{"years":%d,"months":%d,"days":%d}' % (
+        # Exact integer strings, like integers
+        return '{"years":"%d","months":"%d","days":"%d"}' % (
             self.value.years, self.value.months, self.value.days
         )
 

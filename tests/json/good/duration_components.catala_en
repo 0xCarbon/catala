@@ -1,0 +1,92 @@
+# Duration components in JSON
+
+The components of a duration are integers in JSON, as in the schema: integral
+numbers or strings of digits, beyond 2^30 and 2^53 alike, written back as exact
+strings of digits like integers.
+
+```catala
+declaration scope I:
+  input d content duration
+  output twice content duration
+
+scope I:
+  definition twice equals d * 2
+```
+
+```catala-test-cli
+$ catala test-scope I --input {"d":{"days":1073741824}} -F json
+{"twice":{"years":"0","months":"0","days":"2147483648"}}
+```
+
+```catala-test-cli
+$ catala test-scope I --input {"d":{"years":"1","days":"-4611686018427387"}} -F json
+{"twice":{"years":"2","months":"0","days":"-9223372036854774"}}
+```
+
+```catala-test-cli
+$ catala json-schema --scope I
+[
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Scope I input",
+    "description": "Input structure of scope I",
+    "$ref": "#/definitions/I_in",
+    "definitions": {
+      "I_in": {
+        "type": "object",
+        "properties": { "d": { "$ref": "#/definitions/duration" } },
+        "required": [ "d" ],
+        "additionalProperties": false
+      },
+      "duration": {
+        "title": "Catala duration",
+        "type": "object",
+        "properties": {
+          "years": { "$ref": "#/definitions/integer" },
+          "months": { "$ref": "#/definitions/integer" },
+          "days": { "$ref": "#/definitions/integer" }
+        },
+        "additionalProperties": false
+      },
+      "integer": {
+        "title": "Catala Integer",
+        "anyOf": [
+          { "type": "integer" },
+          { "type": "string", "pattern": "^-?[0-9]+$" }
+        ]
+      }
+    }
+  },
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Scope I output",
+    "description": "Output structure of scope I",
+    "$ref": "#/definitions/I",
+    "definitions": {
+      "I": {
+        "type": "object",
+        "properties": { "twice": { "$ref": "#/definitions/duration" } },
+        "required": [ "twice" ],
+        "additionalProperties": false
+      },
+      "duration": {
+        "title": "Catala duration",
+        "type": "object",
+        "properties": {
+          "years": { "$ref": "#/definitions/integer" },
+          "months": { "$ref": "#/definitions/integer" },
+          "days": { "$ref": "#/definitions/integer" }
+        },
+        "additionalProperties": false
+      },
+      "integer": {
+        "title": "Catala Integer",
+        "anyOf": [
+          { "type": "integer" },
+          { "type": "string", "pattern": "^-?[0-9]+$" }
+        ]
+      }
+    }
+  }
+]
+```

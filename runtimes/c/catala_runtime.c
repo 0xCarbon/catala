@@ -860,7 +860,8 @@ void catala_tojson (struct catala_buf buf, const catala_value x) {
     buf.printf("\"%04d-%02d-%02d\"", dc_date_year(x.v), dc_date_month(x.v), dc_date_day(x.v));
     return;
   case DURATION:
-    buf.printf("{\"years\":%ld,\"months\":%ld,\"days\":%ld}]", dc_period_years(x.v), dc_period_months(x.v), dc_period_days(x.v));
+    /* Exact integer strings, like integers */
+    buf.printf("{\"years\":\"%ld\",\"months\":\"%ld\",\"days\":\"%ld\"}", dc_period_years(x.v), dc_period_months(x.v), dc_period_days(x.v));
     return;
   case POSITION: {
     CATALA_POSITION pos = x.v;

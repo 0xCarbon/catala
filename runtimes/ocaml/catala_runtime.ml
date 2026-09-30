@@ -1095,10 +1095,20 @@ module Value = struct
         | j -> fail path "expected a date, got %s" (kind j))
       | Duration ->
         let get = fields path ["years"; "months"; "days"] j in
+        (* Components are integers, as in the JSON schema; a duration holds
+           them as machine integers *)
         let comp k =
           match get k with
           | None -> 0
-          | Some v -> int_in (path ^ "/" ^ k) (-(1 lsl 30)) ((1 lsl 30) - 1) v
+          | Some v ->
+            let z =
+              numeric
+                (path ^ "/" ^ k)
+                "an integer" v ~of_number:ParsedJson.integer_of_number
+                ~of_string:ParsedJson.integer_of_string
+            in
+            if Z.fits_int z then Z.to_int z
+            else raise (Error (IntegerOverflow, [pos], None))
         in
         let years = comp "years" in
         let months = comp "months" in
@@ -1538,7 +1548,8 @@ module BufferedJson = struct
     | V (Date, d) -> quote buf (date_to_string d)
     | V (Duration, d) ->
       let y, m, d = Dates_calc.period_to_ymds d in
-      let p buf (s, v) = Printf.bprintf buf {|"%s":%d|} s v in
+      (* Exact integer strings, like integers *)
+      let p buf (s, v) = Printf.bprintf buf {|"%s":"%d"|} s v in
       Printf.bprintf buf {|{%a}|} (list p) ["years", y; "months", m; "days", d]
     | V (Enum en, e) -> (
       let _, constr, value = en.constr e in

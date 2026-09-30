@@ -1,0 +1,50 @@
+; Durations in the JSON output of the interpreter and of every backend: every
+; component, as a string of digits like integers.
+
+(rule
+ (alias runtest)
+ (deps
+  run.sh
+  durations.catala_en
+  (package catala))
+ (action
+  (run sh run.sh interpret)))
+
+(rule
+ (alias runtest)
+ (deps
+  run.sh
+  durations.catala_en
+  (package catala))
+ (action
+  (run sh run.sh ocaml)))
+
+(rule
+ (alias runtest)
+ (enabled_if %{bin-available:cc})
+ (deps
+  run.sh
+  durations.catala_en
+  (package catala))
+ (action
+  (run sh run.sh c)))
+
+(rule
+ (alias runtest)
+ (enabled_if %{bin-available:javac})
+ (deps
+  run.sh
+  durations.catala_en
+  (package catala))
+ (action
+  (run sh run.sh java)))
+
+(rule
+ (alias runtest)
+ (enabled_if %{bin-available:python3})
+ (deps
+  run.sh
+  durations.catala_en
+  (package catala))
+ (action
+  (run sh run.sh python)))

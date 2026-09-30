@@ -1,0 +1,16 @@
+# Durations in the JSON output of every backend
+
+```catala
+#[test]
+declaration scope S:
+  output neg content duration
+  output big content duration
+  output mixed content duration
+  output zero content duration
+
+scope S:
+  definition neg equals -2 day
+  definition big equals 1073741824 day
+  definition mixed equals 1 year + 2 month + 3 day
+  definition zero equals 0 day
+```

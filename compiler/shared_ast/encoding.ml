@@ -260,11 +260,32 @@ let date_encoding : Val.t encoding =
              Val.V (Date, Dates_calc.make_date ~year ~month ~day));
        ]
 
+(* A component of a duration: a Catala integer in JSON, held as a machine
+   integer. One that does not fit raises the runtime error [IntegerOverflow],
+   whose bound depends on the backend. *)
+let duration_component_encoding : int encoding =
+  conv
+    (fun i -> Val.V (Integer, Z.of_int i))
+    (function
+      | Val.V (Integer, z) when Z.fits_int z -> Z.to_int z
+      | Val.V (Integer, _) ->
+        raise
+          (Json_encoding.Cannot_destruct
+             ([], Runtime.Error (IntegerOverflow, [], None)))
+      | v ->
+        Message.error ~internal:true
+          "Unexpected runtime value %a instead of int while decoding JSON"
+          Val.format v)
+    int_encoding
+
 let duration_encoding : Val.t encoding =
   def "duration" ~title:"Catala duration"
   @@
   let encoding =
-    obj3 (dft "years" int 0) (dft "months" int 0) (dft "days" int 0)
+    obj3
+      (dft "years" duration_component_encoding 0)
+      (dft "months" duration_component_encoding 0)
+      (dft "days" duration_component_encoding 0)
     |> conv
          (function
            | Val.V (Duration, d) -> Dates_calc.period_to_ymds d
@@ -631,8 +652,17 @@ let parse_json ?pos enc text =
       Message.error ?pos "@[<v 2>Failed to parse JSON:@ %s at byte %d@]" msg
         offset
   in
-  try Exact_encoding.destruct enc json
-  with e ->
+  try Exact_encoding.destruct enc json with
+  | Json_encoding.Cannot_destruct (path, Runtime.Error (err, _, _)) ->
+    (* A value of the schema that the runtime cannot hold, e.g. a duration
+       component beyond a machine integer: its runtime error *)
+    Message.error ?pos
+      "@[<v>@[<hov>During evaluation:@ %a.@]@,\
+       @[<hov>Reading the JSON value at@ %s.@]@]"
+      Format.pp_print_text
+      (Runtime.error_message err)
+      (match Json_query.json_pointer_of_path path with "" -> "/" | p -> p)
+  | e ->
     let print_unknown fmt = function
       | Failure msg -> Format.pp_print_string fmt msg
       | e -> Format.pp_print_string fmt (Printexc.to_string e)

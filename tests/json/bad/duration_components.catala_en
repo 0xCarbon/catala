@@ -1,0 +1,49 @@
+# Duration components beyond machine integers
+
+A duration holds its components as machine integers: a component that does
+not fit one is the runtime error of integers too large for a computation,
+reported with the path of the JSON value.
+
+```catala
+declaration scope I:
+  input d content duration
+  output same content duration
+
+scope I:
+  definition same equals d
+```
+
+```catala-test-cli
+$ catala test-scope I --input {"d":{"days":"99999999999999999999"}}
+┌─[ERROR]─
+│
+│  During evaluation: an integer is too large for this computation.
+│  Reading the JSON value at /d/days.
+│
+└─
+#return code 123#
+```
+
+A component that is not an integer is refused by the schema:
+
+```catala-test-cli
+$ catala test-scope I --input {"d":{"days":1.5}}
+┌─[ERROR]─
+│
+│  Failed to validate JSON:
+│    At /d/days, unexpected number 1.5 instead of an integer (integral number or string of digits)
+│  
+│  Expected JSON object of the form:
+│    { "d": $duration }
+│    $duration:
+│      /* Catala duration */
+│      { "years"?: $integer,
+│        "months"?: $integer,
+│        "days"?: $integer }
+│    $integer:
+│      /* Catala Integer */
+│      integer | /^-?[0-9]+$/
+│
+└─
+#return code 123#
+```

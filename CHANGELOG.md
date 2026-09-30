@@ -81,6 +81,14 @@ in behavior visible for the end-users of the tooling.
   (`99999999999999999999 day`, or beyond 2^31 under js_of_ocaml): they are
   reported at the literal instead of failing with `int_of_string`.
 
+* Fix durations in JSON: their components are integers, as for Catala
+  integers: read from integral numbers or strings of digits (the schema and the
+  interpreter capped them at 2^30 - 1 although durations hold machine
+  integers), and written as strings of digits by every runtime. The C runtime
+  wrote an invalid `}]` after every duration and the Java runtime dropped
+  zero and negative components (`-2 day` was `{}`). A component beyond the
+  backend's machine integers raises `IntegerOverflow`.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

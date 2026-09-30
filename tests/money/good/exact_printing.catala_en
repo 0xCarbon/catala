@@ -1,0 +1,34 @@
+# Exact printing of money amounts
+
+Money is an exact number of cents; its JSON output must not go through a
+binary float, which resolves cents only below 2^46 units.
+
+```catala
+#[test]
+declaration scope Amounts:
+  output beyond_float content money
+  output division content money
+  output negative_cents content money
+  output zero content money
+
+scope Amounts:
+  definition beyond_float equals $90,071,992,547,409.93
+  definition division equals $99,999,999,999,999,999,999.99 / 3
+  definition negative_cents equals $0 - $0.05
+  definition zero equals $0
+```
+
+```catala-test-cli
+$ catala test-scope Amounts -F json
+{"beyond_float":"90071992547409.93","division":"33333333333333333333.33","negative_cents":"-0.05","zero":"0.00"}
+```
+
+```catala-test-cli
+$ catala test-scope Amounts
+┌─[RESULT]─ Amounts ─
+│ beyond_float = $90,071,992,547,409.93
+│ division = $33,333,333,333,333,333,333.33
+│ negative_cents = -$0.05
+│ zero = $0.00
+└─
+```

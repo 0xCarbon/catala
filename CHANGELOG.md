@@ -13,6 +13,11 @@ in behavior visible for the end-users of the tooling.
   accepted as an infinite decimal). The input is parsed as strict JSON
   (RFC 8259): comments and `NaN`/`Infinity` are now rejected.
 
+* Fix money printing: amounts are printed from their integer number of cents
+  instead of through a binary float, which printed wrong cents beyond 2^46
+  units (`$90,071,992,547,409.93` was output as `90071992547409.94`). This
+  affects the JSON output, traces and the literals of the Python backend.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

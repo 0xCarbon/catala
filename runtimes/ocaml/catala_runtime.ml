@@ -130,7 +130,12 @@ let money_of_decimal (d : decimal) : money =
 let money_of_integer (i : integer) : money = Z.(i * z100)
 
 let money_to_string (m : money) : string =
-  Format.asprintf "%.2f" Q.(to_float (of_bigint m / q100))
+  (* Printed from the integer number of cents: going through a float would lose
+     cents beyond 2^46 units *)
+  let units, cents = Z.div_rem (Z.abs m) z100 in
+  Printf.sprintf "%s%s.%02d"
+    (if Z.sign m < 0 then "-" else "")
+    (Z.to_string units) (Z.to_int cents)
 
 let money_to_cents m = m
 

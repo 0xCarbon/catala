@@ -1,0 +1,242 @@
+# JSON schema of alternative encodings
+
+Inputs accept several encodings of a value: the first one that decodes is
+used, and several may apply to the same JSON value (a JSON integer is also a
+JSON number). The schema therefore combines them with `anyOf`, not `oneOf`,
+which would refuse `{"amount": 12}` for having two matching branches.
+
+```catala
+declaration enumeration E:
+  -- A
+  -- B content integer
+
+declaration scope S:
+  input amount content money
+  input rate content decimal
+  input count content integer
+  input e content E
+  input o content optional of date
+  output r content (money, decimal, integer, E, optional of date)
+  output is_a content boolean
+
+scope S:
+  definition r equals (amount, rate, count, e, o)
+  definition is_a equals match e with pattern
+    -- A : true
+    -- B content x : x = 0
+```
+
+```catala-test-cli
+$ catala test-scope S --input {"amount":12,"rate":1,"count":1,"e":"A"} -F json
+{"r":["12.00","1","1","A","Absent"],"is_a":true}
+```
+
+```catala-test-cli
+$ catala json-schema --scope S
+[
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Scope S input",
+    "description": "Input structure of scope S",
+    "$ref": "#/definitions/S_in",
+    "definitions": {
+      "E": {
+        "anyOf": [
+          { "type": "string", "enum": [ "A" ] },
+          {
+            "type": "object",
+            "properties": { "B": { "$ref": "#/definitions/integer" } },
+            "required": [ "B" ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "S_in": {
+        "type": "object",
+        "properties": {
+          "amount": { "$ref": "#/definitions/money" },
+          "rate": { "$ref": "#/definitions/decimal" },
+          "count": { "$ref": "#/definitions/integer" },
+          "e": { "$ref": "#/definitions/E" },
+          "o": {
+            "anyOf": [
+              { "$ref": "#/definitions/date" },
+              {
+                "anyOf": [
+                  { "type": "object", "additionalProperties": false },
+                  { "type": "null" },
+                  { "type": "string", "enum": [ "Absent" ] },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "Present": { "$ref": "#/definitions/date" }
+                    },
+                    "required": [ "Present" ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "required": [ "e", "count", "rate", "amount" ],
+        "additionalProperties": false
+      },
+      "date": {
+        "title": "Catala date",
+        "anyOf": [
+          {
+            "description": "Accepts strings with the following format: YYYY-MM-DD, e.g., /"1970-01-31/"",
+            "type": "string"
+          },
+          {
+            "description": "Accepts date objects: {/"year/":<int>, /"month/":<int>, /"day/":<int>}",
+            "type": "object",
+            "properties": {
+              "year": {
+                "type": "integer",
+                "minimum": 0.0,
+                "maximum": 9999.0
+              },
+              "month": { "type": "integer", "minimum": 1.0, "maximum": 12.0 },
+              "day": { "type": "integer", "minimum": 1.0, "maximum": 31.0 }
+            },
+            "required": [ "day", "month", "year" ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "decimal": {
+        "title": "Catala Decimal",
+        "anyOf": [
+          { "type": "number" },
+          {
+            "type": "string",
+            "pattern": "^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$|^-?[0-9]+/[0-9]*[1-9][0-9]*$"
+          }
+        ]
+      },
+      "integer": {
+        "title": "Catala Integer",
+        "anyOf": [
+          { "type": "integer" },
+          { "type": "string", "pattern": "^-?[0-9]+$" }
+        ]
+      },
+      "money": {
+        "title": "Catala Money",
+        "anyOf": [
+          { "type": "number" },
+          {
+            "type": "string",
+            "pattern": "^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Scope S output",
+    "description": "Output structure of scope S",
+    "$ref": "#/definitions/S",
+    "definitions": {
+      "E": {
+        "anyOf": [
+          { "type": "string", "enum": [ "A" ] },
+          {
+            "type": "object",
+            "properties": { "B": { "$ref": "#/definitions/integer" } },
+            "required": [ "B" ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "S": {
+        "type": "object",
+        "properties": {
+          "r": {
+            "type": "array",
+            "items": [
+              { "$ref": "#/definitions/money" },
+              { "$ref": "#/definitions/decimal" },
+              { "$ref": "#/definitions/integer" },
+              { "$ref": "#/definitions/E" },
+              {
+                "anyOf": [
+                  { "type": "object", "additionalProperties": false },
+                  { "type": "null" },
+                  { "type": "string", "enum": [ "Absent" ] },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "Present": { "$ref": "#/definitions/date" }
+                    },
+                    "required": [ "Present" ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            ],
+            "additionalItems": false
+          },
+          "is_a": { "type": "boolean" }
+        },
+        "required": [ "is_a", "r" ],
+        "additionalProperties": false
+      },
+      "date": {
+        "title": "Catala date",
+        "anyOf": [
+          {
+            "description": "Accepts strings with the following format: YYYY-MM-DD, e.g., /"1970-01-31/"",
+            "type": "string"
+          },
+          {
+            "description": "Accepts date objects: {/"year/":<int>, /"month/":<int>, /"day/":<int>}",
+            "type": "object",
+            "properties": {
+              "year": {
+                "type": "integer",
+                "minimum": 0.0,
+                "maximum": 9999.0
+              },
+              "month": { "type": "integer", "minimum": 1.0, "maximum": 12.0 },
+              "day": { "type": "integer", "minimum": 1.0, "maximum": 31.0 }
+            },
+            "required": [ "day", "month", "year" ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "decimal": {
+        "title": "Catala Decimal",
+        "anyOf": [
+          { "type": "number" },
+          {
+            "type": "string",
+            "pattern": "^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$|^-?[0-9]+/[0-9]*[1-9][0-9]*$"
+          }
+        ]
+      },
+      "integer": {
+        "title": "Catala Integer",
+        "anyOf": [
+          { "type": "integer" },
+          { "type": "string", "pattern": "^-?[0-9]+$" }
+        ]
+      },
+      "money": {
+        "title": "Catala Money",
+        "anyOf": [
+          { "type": "number" },
+          {
+            "type": "string",
+            "pattern": "^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$"
+          }
+        ]
+      }
+    }
+  }
+]
+```

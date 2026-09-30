@@ -79,6 +79,38 @@ let json_kind : Runtime.ParsedJson.t -> string = function
   | Array _ -> "array"
   | Object _ -> "object"
 
+(* [Json_encoding.union] decodes with the first case that matches, but its schema
+   combines the cases with [oneOf], which requires exactly one to match. Cases
+   may overlap (a JSON integer is also a JSON number; an optional field of type
+   [optional of T] accepts both a [T] and an optional), and JSON schema
+   validators then refused inputs that Catala accepts, e.g. [{"amount": 12}]
+   for money. Alternatives are described with [anyOf] instead. *)
+let any_case ?description enc proj inj =
+  (* Wrapped so that a definition is referenced, not inlined *)
+  let schema = Json_encoding.schema (conv Fun.id Fun.id enc) in
+  let schema =
+    match description with
+    | None -> schema
+    | Some _ ->
+      Json_schema.update { (Json_schema.root schema) with description } schema
+  in
+  schema, case ?description enc proj inj
+
+let first_match (cases : (Json_schema.schema * 'a case) list) : 'a encoding =
+  let schema =
+    let defs, roots =
+      List.fold_left
+        (fun (defs, roots) (s, _) ->
+          let defs, s = Json_schema.merge_definitions (defs, s) in
+          defs, Json_schema.root s :: roots)
+        (Json_schema.any, []) cases
+    in
+    Json_schema.update
+      (Json_schema.element (Combine (Any_of, List.rev roots)))
+      defs
+  in
+  conv Fun.id Fun.id ~schema (union (List.map snd cases))
+
 (* Patterns of the numeric strings, as read by [Runtime.ParsedJson] *)
 let number_pattern = "-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?"
 let integer_pattern = "^-?[0-9]+$"
@@ -99,7 +131,7 @@ let exact_numeric_encoding
       create
         (element
            (Combine
-              ( One_of,
+              ( Any_of,
                 List.map element number
                 @ [
                     element (String { string_specs with pattern = Some pattern });
@@ -151,10 +183,10 @@ let money_encoding : Val.t encoding =
   (* Amounts are in units; digits beyond the cent are truncated *)
   let money q = Val.V (Money, Q.to_bigint (Q.mul q q_100)) in
   exact_numeric_encoding
-    ~number:Json_schema.[Integer numeric_specs; Number numeric_specs]
+    ~number:Json_schema.[Number numeric_specs]
     ~pattern:money_pattern ~expected:"an amount (number or numeric string)"
     ~write:(function
-      | Val.V (Money, z) -> String (Q.to_string (Q.div (Q.of_bigint z) q_100))
+      | Val.V (Money, z) -> String (Runtime.money_to_string z)
       | v ->
         Message.error ~internal:true
           "Unexpected runtime value %a instead of money while encoding to JSON"
@@ -169,7 +201,7 @@ let money_encoding : Val.t encoding =
 let rat_encoding : Val.t encoding =
   def "decimal" ~title:"Catala Decimal"
   @@ exact_numeric_encoding
-       ~number:Json_schema.[Number numeric_specs; Integer numeric_specs]
+       ~number:Json_schema.[Number numeric_specs]
        ~pattern:decimal_pattern
        ~expected:"a decimal (number, numeric string or fraction)"
        ~write:(function
@@ -196,9 +228,9 @@ let date_encoding : Val.t encoding =
       (req "day" (ranged_int ~minimum:1 ~maximum:31 "days"))
   in
   def "date" ~title:"Catala date"
-  @@ union
+  @@ first_match
        [
-         case
+         any_case
            ~description:
              "Accepts strings with the following format: YYYY-MM-DD, e.g., \
               \"1970-01-31\""
@@ -212,7 +244,7 @@ let date_encoding : Val.t encoding =
                   to JSON"
                  Val.format v)
            (fun s -> Val.V (Date, Dates_calc.date_of_string s));
-         case
+         any_case
            ~description:
              "Accepts date objects: {\"year\":<int>, \"month\":<int>, \
               \"day\":<int>}"
@@ -347,12 +379,12 @@ and generate_option_encoder ctx typ =
     | _ -> None
   in
   let inj_none _ = V (vtyp, None) in
-  union
+  first_match
     [
-      case unit_encoding proj_none inj_none;
-      case null proj_null inj_none;
-      case (make_constant "Absent") proj_none inj_none;
-      case
+      any_case unit_encoding proj_none inj_none;
+      any_case null proj_null inj_none;
+      any_case (make_constant "Absent") proj_none inj_none;
+      any_case
         (obj1 (req "Present" (generate_encoder ctx typ)))
         (function
           | V (Enum en, v) -> (
@@ -453,10 +485,10 @@ and generate_struct_encoder (ctx : decl_ctx) (sname : StructName.t) =
           match constr v with 1, "Present", Some v -> Some v | _ -> None)
         | _ -> None
       in
-      union
+      first_match
         [
-          case (generate_encoder ctx typ) unwrap_present wrap_present;
-          case (generate_option_encoder ctx typ) Option.some Fun.id;
+          any_case (generate_encoder ctx typ) unwrap_present wrap_present;
+          any_case (generate_option_encoder ctx typ) Option.some Fun.id;
         ]
     in
     let bconv : (t * t option) encoding =
@@ -499,11 +531,11 @@ and generate_enum_encoder (ctx : decl_ctx) (ename : EnumName.t) =
   let enum = EnumName.Map.find ename ctx.ctx_enums in
   let bdgs = EnumConstructor.Map.bindings enum in
   let ename_s = EnumName.original_base ename in
-  let make_constructor_case idx (cstr, typ) : t case =
+  let make_constructor_case idx (cstr, typ) : Json_schema.schema * t case =
     let cstr_s = EnumConstructor.original_string cstr in
     match Mark.remove typ with
     | TLit TUnit ->
-      case (constant cstr_s)
+      any_case (constant cstr_s)
         (function
           | V (Enum enc, rval) ->
             let _, cstr_s', _ = enc.constr rval in
@@ -516,7 +548,7 @@ and generate_enum_encoder (ctx : decl_ctx) (ename : EnumName.t) =
         (fun () ->
           V (Enum { name = ename_s; constr = Fun.id }, (idx, cstr_s, None)))
     | _ ->
-      case
+      any_case
         (obj1
            (req
               (EnumConstructor.original_string cstr)
@@ -549,7 +581,7 @@ and generate_enum_encoder (ctx : decl_ctx) (ename : EnumName.t) =
                 let cstr_s = EnumConstructor.original_string cstr in
                 cstr_s, idx)
               bdgs))
-    else List.mapi make_constructor_case bdgs |> union
+    else List.mapi make_constructor_case bdgs |> first_match
   in
   def (Format.asprintf "%a" EnumName.format_shortpath ename) enc
 

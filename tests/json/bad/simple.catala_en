@@ -29,12 +29,10 @@ $ catala test-scope S --input {"x":1,"y":true,"s":{}}
 │    $Str: { "x": $integer }
 │    $integer:
 │      /* Catala Integer */
-│      integer || /^-?[0-9]+$/
+│      integer | /^-?[0-9]+$/
 │    $money:
 │      /* Catala Money */
-│      integer
-│      || number
-│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
+│      number | /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
 │
 └─
 #return code 123#
@@ -55,12 +53,10 @@ $ catala test-scope S --input {"x":1,"y":true,"s":{"x":1}}
 │    $Str: { "x": $integer }
 │    $integer:
 │      /* Catala Integer */
-│      integer || /^-?[0-9]+$/
+│      integer | /^-?[0-9]+$/
 │    $money:
 │      /* Catala Money */
-│      integer
-│      || number
-│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
+│      number | /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
 │
 └─
 #return code 123#
@@ -81,12 +77,10 @@ $ catala test-scope S --input {"x":"bla","y":true,"z":300,"s":{"x":1}}
 │    $Str: { "x": $integer }
 │    $integer:
 │      /* Catala Integer */
-│      integer || /^-?[0-9]+$/
+│      integer | /^-?[0-9]+$/
 │    $money:
 │      /* Catala Money */
-│      integer
-│      || number
-│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
+│      number | /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
 │
 └─
 #return code 123#
@@ -107,12 +101,10 @@ $ catala test-scope S --input {"x":1.5,"y":true,"z":300,"s":{"x":1}}
 │    $Str: { "x": $integer }
 │    $integer:
 │      /* Catala Integer */
-│      integer || /^-?[0-9]+$/
+│      integer | /^-?[0-9]+$/
 │    $money:
 │      /* Catala Money */
-│      integer
-│      || number
-│      || /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
+│      number | /^-?(0|[1-9][0-9]*)(/.[0-9]+)?([eE][+-]?[0-9]+)?$/
 │
 └─
 #return code 123#

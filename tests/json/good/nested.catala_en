@@ -56,7 +56,7 @@ $ catala json-schema --scope T
     "$ref": "#/definitions/T_in",
     "definitions": {
       "E": {
-        "oneOf": [
+        "anyOf": [
           {
             "type": "object",
             "properties": { "A": { "$ref": "#/definitions/S" } },
@@ -95,7 +95,7 @@ $ catala json-schema --scope T
       },
       "integer": {
         "title": "Catala Integer",
-        "oneOf": [
+        "anyOf": [
           { "type": "integer" },
           { "type": "string", "pattern": "^-?[0-9]+$" }
         ]
@@ -125,7 +125,7 @@ $ catala json-schema --scope T
       },
       "integer": {
         "title": "Catala Integer",
-        "oneOf": [
+        "anyOf": [
           { "type": "integer" },
           { "type": "string", "pattern": "^-?[0-9]+$" }
         ]

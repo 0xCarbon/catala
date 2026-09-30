@@ -18,6 +18,11 @@ in behavior visible for the end-users of the tooling.
   units (`$90,071,992,547,409.93` was output as `90071992547409.94`). This
   affects the JSON output, traces and the literals of the Python backend.
 
+* Fix `json-schema`: alternative encodings of a value are combined with
+  `anyOf` instead of `oneOf`, since inputs are decoded with the first encoding
+  that matches. Schema validators refused e.g. `{"amount": 12}` for money,
+  which matched both the `integer` and the `number` alternatives.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

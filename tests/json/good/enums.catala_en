@@ -69,7 +69,7 @@ $ catala json-schema --scope T
     "definitions": {
       "E": { "type": "string", "enum": [ "X", "Y", "Z" ] },
       "F": {
-        "oneOf": [
+        "anyOf": [
           {
             "type": "object",
             "properties": { "A": { "$ref": "#/definitions/integer" } },
@@ -93,7 +93,7 @@ $ catala json-schema --scope T
       },
       "integer": {
         "title": "Catala Integer",
-        "oneOf": [
+        "anyOf": [
           { "type": "integer" },
           { "type": "string", "pattern": "^-?[0-9]+$" }
         ]

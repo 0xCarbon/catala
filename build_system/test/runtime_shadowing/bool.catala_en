@@ -1,0 +1,13 @@
+# A Catala module named like an OCaml standard module
+
+> Module Bool
+
+```catala-metadata
+declaration scope A:
+  output x content integer
+```
+
+```catala
+scope A:
+  definition x equals 1
+```

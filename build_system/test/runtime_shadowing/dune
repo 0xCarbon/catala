@@ -1,0 +1,14 @@
+; clerk compiles the OCaml runtime after an interpreted run has compiled a
+; module named Bool into the project's include path. The project is copied
+; outside the source tree, where clerk, in its installed layout
+; (_build/install/default), finds its runtime.
+
+(rule
+ (alias runtest)
+ (deps
+  bool.catala_en
+  uses_bool.catala_en
+  (package catala))
+ (action
+  (system
+   "clerk=\"$(cd ../../../../install/default/bin && pwd)/clerk\" && d=$(mktemp -d) && cp bool.catala_en uses_bool.catala_en \"$d\" && (cd \"$d\" && \"$clerk\" test . && \"$clerk\" test --backend ocaml .); r=$?; rm -rf \"$d\"; exit $r")))

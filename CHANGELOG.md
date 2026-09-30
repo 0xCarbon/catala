@@ -31,6 +31,10 @@ in behavior visible for the end-users of the tooling.
   interpreter and the OCaml backend; the C, Java and Python runtimes still read
   JSON literals of external types only.
 
+* Fix `clerk`: the OCaml runtime is compiled with its own include path only. A
+  Catala module named like an OCaml standard module (e.g. `Bool`, `String`),
+  once compiled, made the OCaml backend fail with `Unbound value Bool.equal`.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

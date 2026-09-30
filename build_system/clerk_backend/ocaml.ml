@@ -203,7 +203,20 @@ module Spec : Sig.Spec = struct
       Nj.build "ocaml-natobject"
         ~inputs:[Word (dates_base -.- "ml"); Word (ocaml_base -.- "ml")]
         ~implicit_in:[Word (dates_base -.- "cmi"); Word (ocaml_base -.- "cmi")]
-        ~outputs:[Word (ocaml_base -.- "cmx"); Word (ocaml_base -.- "o")];
+        ~outputs:[Word (ocaml_base -.- "cmx"); Word (ocaml_base -.- "o")]
+          (* The runtime depends on its libraries only: with the project's
+             include dirs (including [-I $tdir/ocaml]), a Catala module named
+             like an OCaml standard module (e.g. [Bool], [String]) would shadow
+             it. *)
+        ~vars:
+          [
+            Nj.Binding.make Var.tdir stdbase;
+            Nj.Binding.make ocaml_include
+              (List.map
+                 (fun w -> Nj.Expr.Word w)
+                 (Lazy.force OCaml_Flags.ocaml_include_value
+                 @ ["-I"; stdbase / name]));
+          ];
     ]
 
   let catala ?vars ~is_stdlib:_ ~inputs ~implicit_in ~has_scope_tests =

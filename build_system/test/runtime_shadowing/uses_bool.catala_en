@@ -1,0 +1,17 @@
+# A test using the module `Bool`
+
+Once `Bool` is compiled, by the interpreted run, the OCaml backend compiles
+the Catala runtime, whose include path must not let `Bool` shadow OCaml's
+`Stdlib.Bool` ("Unbound value Bool.equal").
+
+> Using Bool
+
+```catala
+#[test]
+declaration scope T:
+  output a scope Bool.A
+  output b content boolean
+
+scope T:
+  definition b equals a.x = 1
+```

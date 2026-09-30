@@ -263,6 +263,11 @@ module R = Re.Pcre
 #ifndef MR_INTERNAL
   #define MR_INTERNAL MS_INTERNAL
 #endif
+(* Money amounts have one or two decimals unless a language says otherwise *)
+#ifndef MR_MONEY_DECIMALS
+  #define MR_MONEY_DECIMALS Rep (digit, 1 .. 2)
+  #define MS_MONEY_DECIMALS "one or two decimals"
+#endif
 #ifndef MR_MONEY_OP_SUFFIX
   #define MR_MONEY_OP_SUFFIX MS_MONEY_OP_SUFFIX
 #endif
@@ -440,6 +445,26 @@ let rec lex_string buf lexbuf : token =
     lex_string buf lexbuf
   | '"' -> STRING (Buffer.contents buf)
   | _ -> invalid_arg "lex_string"
+
+(** Builds the token of a money amount lexeme: its digits before the decimal
+    separator are the units, those after it the cents *)
+let money_amount lexbuf =
+  let s = Utf8.lexeme lexbuf in
+  let sign = s.[0] <> '-' in
+  let units = Buffer.create (String.length s) in
+  let cents = Buffer.create 2 in
+  let buf = ref units in
+  for i = 0 to String.length s - 1 do
+    match s.[i] with
+    | '0'..'9' as c -> Buffer.add_char !buf c
+    | MC_DECIMAL_SEPARATOR -> buf := cents
+    | _ -> ()
+  done;
+  (* If the user has written $0.3 it means 30 cents so we have to pad
+       with a 0 *)
+  Buffer.add_string cents (String.make (2 - Buffer.length cents) '0');
+  L.update_acc lexbuf;
+  MONEY_AMOUNT (sign, Buffer.contents units, Buffer.contents cents)
 
 (** Main lexing function used in code blocks *)
 let rec lex_code (lexbuf : lexbuf) : token =
@@ -684,24 +709,24 @@ let rec lex_code (lexbuf : lexbuf) : token =
   | MR_DAY ->
       L.update_acc lexbuf;
       DAY
-  | Opt '-', MR_MONEY_PREFIX, digit, Opt (Star (digit | MR_MONEY_DELIM), digit), Opt (MC_DECIMAL_SEPARATOR,
-                                                                             Rep (digit, 1 .. 2)), MR_MONEY_SUFFIX ->
-      let s = Utf8.lexeme lexbuf in
-      let sign = s.[0] <> '-' in
-      let units = Buffer.create (String.length s) in
-      let cents = Buffer.create 2 in
-      let buf = ref units in
-      for i = 0 to String.length s - 1 do
-        match s.[i] with
-        | '0'..'9' as c -> Buffer.add_char !buf c
-        | MC_DECIMAL_SEPARATOR -> buf := cents
-        | _ -> ()
-      done;
-      (* If the user has written $0.3 it means 30 cents so we have to pad
-           with a 0 *)
-      Buffer.add_string cents (String.make (2 - Buffer.length cents) '0');
+  (* Units either ungrouped or grouped by three *)
+  | Opt '-', MR_MONEY_PREFIX,
+    (Plus digit | (Rep (digit, 1 .. 3), Plus (MR_MONEY_DELIM, Rep (digit, 3 .. 3)))),
+    Opt (MC_DECIMAL_SEPARATOR, MR_MONEY_DECIMALS), MR_MONEY_SUFFIX ->
+      money_amount lexbuf
+  (* Anything longer that looks like an amount is a malformed one *)
+  | Opt '-', MR_MONEY_PREFIX, digit, Opt (Star (digit | MR_MONEY_DELIM), digit),
+    Opt (MC_DECIMAL_SEPARATOR, Plus digit), MR_MONEY_SUFFIX ->
+      (* Reported without stopping, so that the error is not followed by
+         spurious parsing errors *)
+      let pos = Pos.from_lpos (lexing_positions lexbuf) in
       L.update_acc lexbuf;
-      MONEY_AMOUNT (sign, Buffer.contents units, Buffer.contents cents)
+      Message.delayed_error ~kind:Lexing (MONEY_AMOUNT (true, "0", "00")) ~pos
+        "@[<hov>Invalid money amount@ @{<yellow>%s@}:@ write the units without \
+         separators or grouped by three with '%c',@ and %s after '%c'@ \
+         (e.g.@ @{<cyan>%s@}).@]"
+        (Utf8.lexeme lexbuf) MR_MONEY_DELIM MS_MONEY_DECIMALS
+        MC_DECIMAL_SEPARATOR MS_MONEY_EXAMPLE
   | '|', Rep (digit, 4), '-', Rep (digit, 2), '-', Rep (digit, 2), '|' ->
     L.update_acc lexbuf;
     let rex =

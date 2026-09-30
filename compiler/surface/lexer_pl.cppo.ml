@@ -115,6 +115,7 @@
 #define MR_MONEY_PREFIX ""
 #define MR_MONEY_DELIM ','
 #define MR_MONEY_SUFFIX Star hspace, "PLN"
+#define MS_MONEY_EXAMPLE "1,234,567.89 PLN"
 
 (* Builtin types *)
 

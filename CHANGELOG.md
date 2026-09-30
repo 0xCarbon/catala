@@ -64,6 +64,10 @@ in behavior visible for the end-users of the tooling.
   tuple (`o but replace { -- f: o.f but replace { ... } }`) generated OCaml
   that did not compile (`Unbound value`); the interpreter accepted it.
 
+* Fix money literals: amounts whose digit groups are not of three digits
+  (`$1,2,3`, `$12,34`, `1 2 3 €`) are rejected with the expected form instead
+  of being read with the separators ignored.
+
 ## Changes since 1.2.0
 
 One line per change, be concise and explicit. Document only external changes

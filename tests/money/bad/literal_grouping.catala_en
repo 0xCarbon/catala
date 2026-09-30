@@ -1,0 +1,73 @@
+# Malformed money amounts
+
+Units are written without separators or grouped by three with `,`, and an
+amount has one or two decimals after `.`. Each malformed amount below is
+reported with the expected form.
+
+```catala
+declaration short_groups content money equals $1,2,3
+declaration long_first_group content money equals $8548,650.96
+declaration group_of_two content money equals $12,34
+declaration group_of_four content money equals $1,2345
+declaration three_decimals content money equals $12.345
+```
+
+```catala-test-cli
+$ catala typecheck
+┌─[ERROR]─ 1/5 ─
+│
+│  Invalid money amount $1,2,3:
+│  write the units without separators or grouped by three with ',',
+│  and one or two decimals after '.' (e.g. $1,234,567.89).
+│
+├─➤ tests/money/bad/literal_grouping.catala_en:8.47-53:
+│   │
+│ 8 │ declaration short_groups content money equals $1,2,3
+│   │                                               ‾‾‾‾‾‾
+└─
+┌─[ERROR]─ 2/5 ─
+│
+│  Invalid money amount $8548,650.96:
+│  write the units without separators or grouped by three with ',',
+│  and one or two decimals after '.' (e.g. $1,234,567.89).
+│
+├─➤ tests/money/bad/literal_grouping.catala_en:9.51-63:
+│   │
+│ 9 │ declaration long_first_group content money equals $8548,650.96
+│   │                                                   ‾‾‾‾‾‾‾‾‾‾‾‾
+└─
+┌─[ERROR]─ 3/5 ─
+│
+│  Invalid money amount $12,34:
+│  write the units without separators or grouped by three with ',',
+│  and one or two decimals after '.' (e.g. $1,234,567.89).
+│
+├─➤ tests/money/bad/literal_grouping.catala_en:10.47-53:
+│    │
+│ 10 │ declaration group_of_two content money equals $12,34
+│    │                                               ‾‾‾‾‾‾
+└─
+┌─[ERROR]─ 4/5 ─
+│
+│  Invalid money amount $1,2345:
+│  write the units without separators or grouped by three with ',',
+│  and one or two decimals after '.' (e.g. $1,234,567.89).
+│
+├─➤ tests/money/bad/literal_grouping.catala_en:11.48-55:
+│    │
+│ 11 │ declaration group_of_four content money equals $1,2345
+│    │                                                ‾‾‾‾‾‾‾
+└─
+┌─[ERROR]─ 5/5 ─
+│
+│  Invalid money amount $12.345:
+│  write the units without separators or grouped by three with ',',
+│  and one or two decimals after '.' (e.g. $1,234,567.89).
+│
+├─➤ tests/money/bad/literal_grouping.catala_en:12.49-56:
+│    │
+│ 12 │ declaration three_decimals content money equals $12.345
+│    │                                                 ‾‾‾‾‾‾‾
+└─
+#return code 123#
+```

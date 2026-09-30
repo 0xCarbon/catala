@@ -1,0 +1,45 @@
+# Malformed money amounts (Polish)
+
+```catala
+deklaracja krotkie typu pieniądze wynosi 1,2,3 PLN
+deklaracja dlugie typu pieniądze wynosi 8548,650.96 PLN
+deklaracja trzy typu pieniądze wynosi 12.345 PLN
+```
+
+```catala-test-cli
+$ catala typecheck
+┌─[ERROR]─ 1/3 ─
+│
+│  Invalid money amount 1,2,3 PLN:
+│  write the units without separators or grouped by three with ',',
+│  and one or two decimals after '.' (e.g. 1,234,567.89 PLN).
+│
+├─➤ tests/money/bad/literal_grouping_pl.catala_pl:4.42-51:
+│   │
+│ 4 │ deklaracja krotkie typu pieniądze wynosi 1,2,3 PLN
+│   │                                          ‾‾‾‾‾‾‾‾‾
+└─
+┌─[ERROR]─ 2/3 ─
+│
+│  Invalid money amount 8548,650.96 PLN:
+│  write the units without separators or grouped by three with ',',
+│  and one or two decimals after '.' (e.g. 1,234,567.89 PLN).
+│
+├─➤ tests/money/bad/literal_grouping_pl.catala_pl:5.41-56:
+│   │
+│ 5 │ deklaracja dlugie typu pieniądze wynosi 8548,650.96 PLN
+│   │                                         ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+└─
+┌─[ERROR]─ 3/3 ─
+│
+│  Invalid money amount 12.345 PLN:
+│  write the units without separators or grouped by three with ',',
+│  and one or two decimals after '.' (e.g. 1,234,567.89 PLN).
+│
+├─➤ tests/money/bad/literal_grouping_pl.catala_pl:6.39-49:
+│   │
+│ 6 │ deklaracja trzy typu pieniądze wynosi 12.345 PLN
+│   │                                       ‾‾‾‾‾‾‾‾‾‾
+└─
+#return code 123#
+```

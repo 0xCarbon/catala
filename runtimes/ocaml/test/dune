@@ -96,3 +96,8 @@
    (diff interpreted1.json compiled1.json)
    (diff interpreted2.json compiled2.json)
    (diff interpreted3.json compiled3.json))))
+
+(test
+ (name trace_reset)
+ (modules trace_reset)
+ (libraries catala.runtime_ocaml))

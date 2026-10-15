@@ -1498,7 +1498,8 @@ let retrieve_trace () : trace =
 
 let reset_trace () =
   trace_context.current_node <- None;
-  trace_context.root_rev_trace <- []
+  trace_context.root_rev_trace <- [];
+  trace_context.exception_handled <- false
 
 module BufferedJson = struct
   let seq f buf sq =
